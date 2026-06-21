@@ -304,7 +304,7 @@ export const LeagueManager = () => {
                 <div style={{ background: "#5B21B610", border: "1px solid #5B21B630", borderRadius: 8, padding: "10px 12px" }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: "#7C3AED", marginBottom: 4 }}>Yahoo Fantasy OAuth</div>
                   <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.6 }}>
-                    Yahoo requires OAuth. Click below to authenticate — you'll be redirected to Yahoo and back.
+                    Yahoo requires OAuth. Click below to authenticate — you&apos;ll be redirected to Yahoo and back.
                     <br />Requires <code style={{ color: C.text }}>YAHOO_CLIENT_ID</code> in <code style={{ color: C.text }}>.env.local</code> (see <a href="https://developer.yahoo.com/apps/" target="_blank" rel="noreferrer" style={{ color: "#7C3AED" }}>developer.yahoo.com/apps</a>).
                   </div>
                 </div>
