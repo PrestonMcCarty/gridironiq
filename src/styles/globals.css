@@ -1,0 +1,22 @@
+/* GridironIQ — Global Styles */
+* { box-sizing: border-box; }
+body { margin: 0; }
+input::placeholder { color: #4B5563; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #0A0E17; }
+::-webkit-scrollbar-thumb { background: #1F2937; border-radius: 3px; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.7; }
+  50%       { opacity: 0.35; }
+}
+
+@keyframes ticker {
+  from { transform: translateX(100vw); }
+  to   { transform: translateX(-100%); }
+}
+
+.tk {
+  display: inline-block;
+  animation: ticker 80s linear infinite;
+}
