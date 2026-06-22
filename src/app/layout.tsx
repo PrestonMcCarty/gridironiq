@@ -1,4 +1,8 @@
 import type { Metadata } from "next";
+
+// This app fetches all data at runtime from Sleeper and FantasyCalc.
+// Static generation would produce an empty shell; force dynamic rendering instead.
+export const dynamic = "force-dynamic";
 import "@/styles/globals.css";
 
 export const metadata: Metadata = {

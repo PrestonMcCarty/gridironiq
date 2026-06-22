@@ -1,12 +1,16 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
-import { SleeperService }      from "@/lib/services/sleeper";
-import { FantasyCalcService }  from "@/lib/services/fantasycalc";
+import { SleeperService }        from "@/lib/services/sleeper";
+import { FantasyCalcService }    from "@/lib/services/fantasycalc";
 import { PlayerIntelligence, computeDefensiveRankings } from "@/lib/engines/playerIntelligence";
 import { initNflState, CURRENT_SEASON, CURRENT_WEEK } from "@/lib/constants";
+import { NFLScheduleService }    from "@/lib/data/nflSchedule";
+import { computeDataHealth, logHealthReport } from "@/lib/data/dataHealth";
+import { initialiseCrosswalk, logCrosswalkReport, getCrosswalkHealth } from "@/lib/identity/crosswalkStore";
+import { loadHistoricalArtifact, lookupHistorical, logHistoricalCoverageReport } from "@/lib/historical/historicalLoader";
 
 export function usePlayers(scoring = "PPR", isSuperflex = false) {
-  const [state, setState] = useState({ players: [], loading: true, error: null, source: null, counts: {} });
+  const [state, setState] = useState({ players: [], loading: true, error: null, source: null, counts: {}, historicalCoverage: null });
 
   const load = useCallback(async () => {
     setState(s => ({ ...s, loading: true, error: null }));
@@ -43,6 +47,28 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
       );
 
       const defRanksByPos = computeDefensiveRankings(multiWeekStats, sleeperPlayers);
+
+      // ── Build live bye week map from Sleeper player objects ──────────────
+      // Replaces the hardcoded 2024 byeMap in tradeFinder.js.
+      // Sleeper's /v1/players/nfl response includes bye_week on each player.
+      const byeWeekMap       = NFLScheduleService.buildByeWeekMap(sleeperPlayers);
+      const byeWeekMapHealth = NFLScheduleService.validateByeWeekMap(byeWeekMap);
+      if (byeWeekMapHealth.missing.length) {
+        console.warn(`[GridironIQ] Bye week missing for: ${byeWeekMapHealth.missing.join(", ")}`);
+      } else {
+        console.info(`[GridironIQ] ✓ Bye weeks loaded for all ${byeWeekMapHealth.covered} teams (source: ${byeWeekMapHealth.source})`);
+      }
+
+      // ── Phase 1: Player identity crosswalk ────────────────────────────────
+      // Seeds canonical IDs for every live Sleeper player.
+      initialiseCrosswalk(sleeperPlayers);
+      logCrosswalkReport();
+
+      // ── Phase 2: Load historical artifact (non-blocking) ──────────────────
+      // Runs in parallel with the player filter/sort below; awaited before join.
+      const historicalLoadPromise = loadHistoricalArtifact();
+
+      const fetchedAt = Date.now();
 
       const RELEVANT = ["QB", "RB", "WR", "TE", "K", "DEF"];
       // Sleeper uses "DEF" for D/ST team defenses.
@@ -124,6 +150,7 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
           { ...sp, ownership_pct: trendingIds.has(pid) ? (sp.ownership ?? 50) : (sp.ownership ?? 20) },
           weeklyScores, proj, fc, defRanksByPos, scoring, nextOpp,
           currentPosRank,
+          byeWeekMap,
         );
         player.news = player.news.map(n => ({
           ...n,
@@ -133,6 +160,123 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
       });
 
       enriched.sort((a, b) => b.ppg - a.ppg);
+
+      // ── Phase 2: Join historical 2024 data onto each player ───────────────
+      // Awaited here — the fetch began above in parallel with filter/sort work.
+      await historicalLoadPromise;
+
+      const historicalByPos = { QB: { matched: 0, total: 0 }, RB: { matched: 0, total: 0 }, WR: { matched: 0, total: 0 }, TE: { matched: 0, total: 0 }, K: { matched: 0, total: 0 }, DST: { matched: 0, total: 0 } };
+      let historicalMatched = 0;
+
+      enriched.forEach(p => {
+        // Compute canonical_id matching the artifact's key scheme:
+        //   DST  → "giq:dst:{TEAM}"   (mirrors buildCanonicalId("dst", team))
+        //   Skill → "giq:{player_id}" (mirrors buildCanonicalId("skill", id))
+        const canonId = p.pos === "DST"
+          ? `giq:dst:${(p.team || "").toUpperCase()}`
+          : `giq:${p.id}`;
+
+        const hist = lookupHistorical(canonId);
+
+        if (historicalByPos[p.pos]) historicalByPos[p.pos].total++;
+
+        if (hist) {
+          historicalMatched++;
+          if (historicalByPos[p.pos]) historicalByPos[p.pos].matched++;
+
+          p.historical2024    = hist;
+          p.fantasyPoints2024 = hist.fantasy_points_ppr  ?? null;
+          p.ppg2024           = hist.ppg_ppr             ?? null;
+          p.finish2024        = hist.overall_finish       ?? null;
+          p.positionFinish2024= hist.position_finish      ?? null;
+        } else {
+          p.historical2024    = null;
+          p.fantasyPoints2024 = null;
+          p.ppg2024           = null;
+          p.finish2024        = null;
+          p.positionFinish2024= null;
+        }
+      });
+
+      const historicalCoverage = logHistoricalCoverageReport(
+        enriched, enriched.length, historicalMatched, historicalByPos
+      );
+
+      // ── DEBUG: Phase 2 summary (temporary — remove when UI is built) ──────
+      console.group("[GridironIQ] Phase 2 Historical Integration — Debug Summary");
+      console.info(`  Total players in pool : ${historicalCoverage.totalPool}`);
+      console.info(`  Historical matches    : ${historicalCoverage.matched}`);
+      console.info(`  Historical coverage   : ${historicalCoverage.coveragePct}%`);
+      console.info(`  Unmatched             : ${historicalCoverage.unmatched}`);
+      const sampleWithHist = enriched.filter(p => p.historical2024).slice(0, 3);
+      if (sampleWithHist.length) {
+        console.info("  Sample matched players:");
+        sampleWithHist.forEach(p => {
+          console.info(`    ${p.name} (${p.pos}) — 2024: ${p.fantasyPoints2024?.toFixed(1) ?? "n/a"} pts, ppg ${p.ppg2024?.toFixed(1) ?? "n/a"}, pos#${p.positionFinish2024 ?? "n/a"}`);
+        });
+      }
+      console.groupEnd();
+
+      // ── ADP Ranking Pass ───────────────────────────────────────────────────
+      // This is the single authoritative pass that assigns:
+      //   overallRank  — unique 1..N across all positions, sorted by ADP then ppg
+      //   posRank      — unique 1..N within each position group
+      //   adp          — guaranteed non-null and unique (backfilled from overallRank)
+      //
+      // Sort order for ranking:
+      //   1. FC-sourced ADP first (real draft pick numbers), ascending
+      //   2. Estimated ADP next (positional tier fallback), ascending
+      //   3. No-ADP players last, sorted by ppg descending
+      //   4. Tiebreak within same ADP: higher ppg = better rank
+
+      enriched.sort((a, b) => {
+        const aHasReal = a.adpSource === "fantasycalc";
+        const bHasReal = b.adpSource === "fantasycalc";
+        const aHasEst  = a.adp != null;
+        const bHasEst  = b.adp != null;
+
+        // FC-sourced before estimated before null
+        if (aHasReal !== bHasReal) return aHasReal ? -1 : 1;
+        if (aHasEst  !== bHasEst)  return aHasEst  ? -1 : 1;
+
+        // Both have ADP: ascending pick number, tiebreak by ppg desc
+        if (a.adp != null && b.adp != null) {
+          if (a.adp !== b.adp) return a.adp - b.adp;
+          return b.ppg - a.ppg;
+        }
+
+        // Both have no ADP: descending ppg
+        return b.ppg - a.ppg;
+      });
+
+      // Assign unique overallRank and posRank; backfill ADP from overallRank
+      const posRankCounters = { QB: 0, RB: 0, WR: 0, TE: 0, K: 0, DST: 0 };
+      // Track last seen ADP per position to ensure unique positional ADP
+      const lastPosAdp = { QB: 0, RB: 0, WR: 0, TE: 0, K: 0, DST: 0 };
+
+      enriched.forEach((p, idx) => {
+        const overallRank = idx + 1;
+        p.overallRank = overallRank;
+
+        if (posRankCounters[p.pos] !== undefined) {
+          posRankCounters[p.pos]++;
+          p.posRank = posRankCounters[p.pos];
+        } else {
+          p.posRank = 1;
+        }
+
+        // Guarantee unique ADP: if null or duplicate, derive from overallRank
+        // This ensures the Draft Assistant has a clean 1..N ordering
+        if (p.adp == null) {
+          // Use overallRank directly as ADP for unranked players (they sort last)
+          p.adp       = overallRank + 0.1; // +0.1 distinguishes from exact FC picks
+          p.adpSource = "derived";
+        }
+        // Ensure positional ADP is also unique: must exceed last seen for this pos
+        if (p.positionalAdp == null) {
+          p.positionalAdp = p.posRank + 0.1;
+        }
+      });
 
       // ── Validation: per-position counts ─────────────────────────────────
       const counts = { QB: 0, RB: 0, WR: 0, TE: 0, K: 0, DST: 0, FA: 0, IR: 0 };
@@ -153,7 +297,14 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
         (counts.K < 32  ? `\n  ⚠ K gap: only ${counts.K} kickers (expected ~32+)` : `\n  ✓ Kicker pool healthy (${counts.K})`)
       );
 
-      setState({ players: enriched, loading: false, error: null, source: "live", counts });
+      setState({ players: enriched, loading: false, error: null, source: "live", counts, historicalCoverage });
+
+      // ── Data Health Report ─────────────────────────────────────────────
+      const healthReport = computeDataHealth(enriched, {
+        fetchedAt, season, week, byeWeekMapHealth,
+      });
+      logHealthReport(healthReport);
+      setState(s => ({ ...s, health: healthReport }));
     } catch (err) {
       console.error("[GridironIQ] load error:", err);
       setState(s => ({ ...s, loading: false, error: err.message, source: "error" }));

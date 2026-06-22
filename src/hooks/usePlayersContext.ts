@@ -5,12 +5,19 @@ import { PLATFORMS, PLATFORM_LABELS } from "@/lib/league/LeagueModel";
 // ── Context type — every signature must match the real implementation ────────
 export interface PlayersCtxType {
   // Player pool
-  players:    any[];
-  loading:    boolean;
-  error:      string | null;
-  findPlayer: (id: string) => any;          // takes id — was () => null in default
-  refresh:    () => void;
-  counts:     Record<string, number>;
+  players:           any[];
+  loading:           boolean;
+  error:             string | null;
+  findPlayer:        (id: string) => any;
+  refresh:           () => void;
+  counts:            Record<string, number>;
+  historicalCoverage: {
+    totalPool:    number;
+    matched:      number;
+    unmatched:    number;
+    coveragePct:  number;
+    byPosition:   Record<string, { matched: number; total: number }>;
+  } | null;
 
   // Multi-platform league store
   leagues:         any[];
@@ -55,9 +62,10 @@ export interface PlayersCtxType {
 // Default values — stubs that satisfy the interface types
 const defaultCtx: PlayersCtxType = {
   players: [], loading: true, error: null,
-  findPlayer:    (_id: string) => null,       // correct signature: takes id
-  refresh:       () => {},
-  counts:        {},
+  findPlayer:         (_id: string) => null,
+  refresh:            () => {},
+  counts:             {},
+  historicalCoverage: null,
 
   leagues: [], activeLeagueId: null, activeLeague: null,
   addLeague:        (_platform: string, _credentials: any, _info?: any) => Promise.resolve(null),
