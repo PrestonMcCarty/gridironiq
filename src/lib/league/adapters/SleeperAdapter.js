@@ -112,6 +112,16 @@ export const SleeperAdapter = {
    * Look up a user by username and return all their leagues for the season.
    * Returns: Array<{ platformLeagueId, name, type, totalTeams, season, userId }>
    */
+  /**
+   * Look up a Sleeper user by username. Returns the raw user object with user_id.
+   */
+  async getUserByUsername(username) {
+    return fetchJSON(
+      `https://api.sleeper.app/v1/user/${username}`,
+      3_600_000, `sleeper:user:${username}`
+    );
+  },
+
   async getLeaguesForUser(credentials) {
     const { username } = credentials;
     if (!username) throw new Error("Sleeper username required");
@@ -227,17 +237,24 @@ export const SleeperAdapter = {
     return { rosters, matchups, transactions, draftPicks: [], schedule: {}, myTeamId };
   },
 
-  /** Map a userId to their team's playerIds */
+  /** Map a userId to their team's playerIds — returns [] if userId not found (no silent fallback) */
   getMyRosterIds(data, userId) {
-    if (!data?.rosters?.length) return [];
-    const mine = data.rosters.find(r => String(r.ownerId) === String(userId))
-      || data.rosters[0];
-    return mine?.playerIds || [];
+    if (!data?.rosters?.length || !userId) return [];
+    const mine = data.rosters.find(r => String(r.ownerId) === String(userId));
+    if (!mine) {
+      console.warn(`[SleeperAdapter] getMyRosterIds: userId ${userId} not found in ${data.rosters.length} rosters`);
+      return [];
+    }
+    return mine.playerIds || [];
   },
 
   getMyTeamId(data, userId) {
-    if (!data?.rosters?.length) return null;
+    if (!data?.rosters?.length || !userId) return null;
     const mine = data.rosters.find(r => String(r.ownerId) === String(userId));
-    return mine?.teamId || data.rosters[0]?.teamId || null;
+    if (!mine) {
+      console.warn(`[SleeperAdapter] getMyTeamId: userId ${userId} not found in rosters`);
+      return null;
+    }
+    return mine.teamId || null;
   },
 };

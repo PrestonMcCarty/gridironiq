@@ -18,6 +18,9 @@ dist/
 .env.test.local
 .env.production.local
 
+# Historical build cache — raw CSV files should not be committed
+# The generated artifact (public/data/historical_2024.json) IS committed
+scripts/cache/
 # Logs
 npm-debug.log*
 yarn-debug.log*

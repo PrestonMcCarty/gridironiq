@@ -2,25 +2,28 @@
 import { useState } from "react";
 import { C } from "@/lib/theme";
 import { SyncIcon } from "@/components/ui/Icons";
-import { SleeperLeagueService } from "@/lib/services/sleeperLeague";
+import { SleeperAdapter } from "@/lib/league/adapters/SleeperAdapter";
 
+/**
+ * LeagueConnectPanel — Trades page inline connect widget.
+ * Migrated from SleeperLeagueService (legacy) to SleeperAdapter (canonical).
+ * All state management delegates to addLeague in PlayersCtx via onLeagueLoaded.
+ */
 export const LeagueConnectPanel = ({ onLeagueLoaded }) => {
-  const [username,  setUsername]  = useState("");
-  const [leagueId,  setLeagueId]  = useState("");
-  const [leagues,   setLeagues]   = useState([]);
-  const [loading,   setLoading]   = useState(false);
-  const [error,     setError]     = useState(null);
-  const [step,      setStep]      = useState("input");
+  const [username, setUsername] = useState("");
+  const [leagueId, setLeagueId] = useState("");
+  const [leagues,  setLeagues]  = useState([]);
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState(null);
+  const [step,     setStep]     = useState("input");
 
   const lookupUser = async () => {
     if (!username.trim()) { setError("Enter your Sleeper username"); return; }
     setLoading(true); setError(null);
     try {
-      const user = await SleeperLeagueService.getUserByName(username.trim());
-      if (!user) { setError("User not found — check your Sleeper username"); setLoading(false); return; }
-      const userLeagues = await SleeperLeagueService.getLeaguesForUser(user.user_id);
-      if (!userLeagues.length) { setError("No leagues found for this user"); setLoading(false); return; }
-      setLeagues(userLeagues.map(l => ({ ...l, userId: user.user_id })));
+      const results = await SleeperAdapter.getLeaguesForUser({ username: username.trim() });
+      if (!results.length) { setError("No leagues found for this user"); setLoading(false); return; }
+      setLeagues(results.map(l => ({ ...l, _userId: l.userId || null })));
       setStep("select");
     } catch (e) { setError(e.message); }
     setLoading(false);
@@ -30,15 +33,18 @@ export const LeagueConnectPanel = ({ onLeagueLoaded }) => {
     if (!leagueId.trim()) { setError("Enter a League ID"); return; }
     setLoading(true); setError(null);
     try {
-      const info = await SleeperLeagueService.getLeagueInfo(leagueId.trim());
+      const info = await SleeperAdapter.getLeagueInfo(leagueId.trim());
       if (!info) { setError("League not found — check the ID"); setLoading(false); return; }
-      onLeagueLoaded(leagueId.trim(), null, info);
+      onLeagueLoaded(leagueId.trim(), null, info._raw || info);
       setStep("done");
     } catch (e) { setError(e.message); }
     setLoading(false);
   };
 
-  const selectLeague = (league) => { onLeagueLoaded(league.league_id, league.userId, league); setStep("done"); };
+  const selectLeague = (league) => {
+    onLeagueLoaded(league.platformLeagueId, league._userId, league._raw || league);
+    setStep("done");
+  };
 
   if (step === "done") return null;
 
@@ -80,11 +86,11 @@ export const LeagueConnectPanel = ({ onLeagueLoaded }) => {
           <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>Select a league to analyze:</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {leagues.map(l => (
-              <button key={l.league_id} onClick={() => selectLeague(l)} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", textAlign: "left" }}
+              <button key={l.platformLeagueId} onClick={() => selectLeague(l)} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", textAlign: "left" }}
                 onMouseEnter={e => e.currentTarget.style.borderColor = C.accent + "60"} onMouseLeave={e => e.currentTarget.style.borderColor = C.border}>
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{l.name}</div>
-                  <div style={{ fontSize: 10, color: C.muted, fontFamily: "monospace" }}>{l.total_rosters} teams · {l.settings?.type === 2 ? "Dynasty" : "Redraft"}</div>
+                  <div style={{ fontSize: 10, color: C.muted, fontFamily: "monospace" }}>{l.totalTeams} teams · {l.type}</div>
                 </div>
                 <span style={{ fontSize: 12, color: C.accent }}>→</span>
               </button>

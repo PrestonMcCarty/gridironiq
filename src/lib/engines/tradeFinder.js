@@ -161,8 +161,9 @@ export const TradeFinderEngine = {
   },
 
   _analyzeByeWeeks(give, receive) {
-    const byeMap = { ARI:6,ATL:12,BAL:14,BUF:12,CAR:11,CHI:7,CIN:12,CLE:10,DAL:7,DEN:14,DET:5,GB:10,HOU:14,IND:14,JAX:12,KC:6,LAC:5,LAR:6,LV:10,MIA:6,MIN:6,NE:14,NO:12,NYG:11,NYJ:12,PHI:5,PIT:9,SEA:10,SF:9,TB:11,TEN:5,WAS:14 };
-    const getBye = p => byeMap[p.team] || null;
+    // bye is now a real field on every player object, sourced from Sleeper's
+    // bye_week field during enrichment. No hardcoded season-specific map.
+    const getBye = p => p.bye || null;
     const giveByes    = give.map(p => ({ name: p.name, bye: getBye(p) })).filter(x => x.bye);
     const receiveByes = receive.map(p => ({ name: p.name, bye: getBye(p) })).filter(x => x.bye);
     const byeCounts = {}; const conflicts = [];

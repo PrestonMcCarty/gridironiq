@@ -38,52 +38,23 @@ function buildNameKeys(rawName) {
   return keys;
 }
 
-/**
- * Positional ADP fallback ranks by position tier.
- * Used when FantasyCalc has no ADP for a player (depth players, rookies).
- * Thresholds intentionally generous — we'd rather show approximate ADP
- * than the meaningless "99" placeholder.
- */
-const POS_ADP_TIERS = {
-  QB: [
-    { maxRank: 1,  adp: 25  },
-    { maxRank: 5,  adp: 60  },
-    { maxRank: 12, adp: 120 },
-    { maxRank: 24, adp: 200 },
-  ],
-  RB: [
-    { maxRank: 3,  adp: 10  },
-    { maxRank: 10, adp: 40  },
-    { maxRank: 24, adp: 90  },
-    { maxRank: 40, adp: 140 },
-    { maxRank: 60, adp: 200 },
-  ],
-  WR: [
-    { maxRank: 3,  adp: 15  },
-    { maxRank: 10, adp: 45  },
-    { maxRank: 24, adp: 90  },
-    { maxRank: 40, adp: 140 },
-    { maxRank: 60, adp: 200 },
-  ],
-  TE: [
-    { maxRank: 1,  adp: 20  },
-    { maxRank: 5,  adp: 70  },
-    { maxRank: 12, adp: 120 },
-    { maxRank: 24, adp: 180 },
-  ],
-  K:  [
-    { maxRank: 12, adp: 160 },
-  ],
+// ── DST abbreviation → FantasyCalc normalized name key ────────────────────
+// FantasyCalc DST entries use city/team names like "Chiefs D/ST".
+// normFull("Chiefs D/ST") → "chiefsddst" — we pre-compute these keys so
+// the lookup() method can resolve DST ADP by team abbreviation.
+const DST_ABBR_TO_FC_KEY = {
+  ARI: "cardinalsdst",  ATL: "falconsdst",    BAL: "ravensdst",
+  BUF: "billsdst",      CAR: "panthersdst",   CHI: "bearsdst",
+  CIN: "bengalsdst",    CLE: "brownsdst",     DAL: "cowboysdst",
+  DEN: "broncosdst",    DET: "lionsdst",      GB:  "packersdst",
+  HOU: "texansdst",     IND: "coltsdst",      JAX: "jaguarsdst",
+  KC:  "chiefsdst",     LAC: "chargersdst",   LAR: "ramsdst",
+  LV:  "raidersdst",    MIA: "dolphinsdst",   MIN: "vikingsdst",
+  NE:  "patriotsdst",   NO:  "saintsdst",     NYG: "giantsdst",
+  NYJ: "jetsdst",       PHI: "eaglesdst",     PIT: "steelersdst",
+  SEA: "seahawksdst",   SF:  "ersdst",        TB:  "buccaneersdst",
+  TEN: "titansdst",     WAS: "commandersdst",
 };
-
-function posAdpFallback(position, positionalRank) {
-  if (!positionalRank) return null;
-  const tiers = POS_ADP_TIERS[position] || [];
-  for (const tier of tiers) {
-    if (positionalRank <= tier.maxRank) return tier.adp;
-  }
-  return null;
-}
 
 export const FantasyCalcService = {
   /**
@@ -178,6 +149,20 @@ export const FantasyCalcService = {
    */
   lookup(sp, nameMap) {
     if (!sp || !nameMap) return null;
+
+    // ── DST: match by team abbreviation → FC team name ─────────────────────
+    // FantasyCalc DST entries use names like "Chiefs D/ST", "Eagles D/ST" etc.
+    // Sleeper DST entries have sp.team = "KC", sp.position = "DST".
+    // Normal buildNameKeys("Kansas City Chiefs") won't match "chiefsddst".
+    if (sp.position === "DST" || sp.position === "DEF") {
+      const abbr = sp.team;
+      if (abbr && DST_ABBR_TO_FC_KEY[abbr]) {
+        const hit = nameMap[DST_ABBR_TO_FC_KEY[abbr]];
+        if (hit) return hit;
+      }
+      return null;
+    }
+
     const name = sp.full_name || `${sp.first_name || ""} ${sp.last_name || ""}`.trim();
     const keys = buildNameKeys(name);
     for (const key of keys) {
@@ -190,12 +175,4 @@ export const FantasyCalcService = {
     return null;
   },
 
-  /**
-   * Compute a fallback ADP for players not in the FC dataset.
-   * Uses positional rank within the enriched player array.
-   * Returns null when no estimate is possible.
-   */
-  fallbackAdp(position, positionalRank) {
-    return posAdpFallback(position, positionalRank);
-  },
 };

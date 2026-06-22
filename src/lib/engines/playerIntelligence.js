@@ -3,13 +3,13 @@ import { AIExplanationEngine } from "@/lib/engines/aiExplanation";
 import { CURRENT_SEASON, defRankToGrade, defRankToLabel } from "@/lib/constants";
 
 export const PlayerIntelligence = {
-  compute(sleeperPlayer, weeklyScores = [], projData = null, fcValue = null, defRanksByPos = {}, scoring = "PPR", nextOpp = null, positionalRank = null) {
+  compute(sleeperPlayer, weeklyScores = [], projData = null, fcValue = null, defRanksByPos = {}, scoring = "PPR", nextOpp = null, positionalRank = null, byeWeekMap = {}) {
     const sp  = sleeperPlayer;
     const pos = sp.position || sp.fantasy_positions?.[0] || "?";
 
     // ── Route DST and K to specialized compute paths ──────────────────────
-    if (pos === "DST") return this._computeDST(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank);
-    if (pos === "K")   return this._computeK(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank);
+    if (pos === "DST") return this._computeDST(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank, byeWeekMap);
+    if (pos === "K")   return this._computeK(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank, byeWeekMap);
 
     // ── Skill player path (QB / RB / WR / TE) ────────────────────────────
     const team = sp.team || sp.fantasy_team || "FA";
@@ -57,7 +57,7 @@ export const PlayerIntelligence = {
     ] : [];
 
     const sosScore        = oppTeam ? Math.round((rawDefRank / 32) * 100) : 50;
-    const playoffSosScore = sosScore;
+    const playoffSosScore = defRanksByPos[pos] ? Math.round(((32 - (defRanksByPos[pos][team] || 16)) / 31) * 94 + 3) : sosScore;
 
     const injMap = { Out: 10, Doubtful: 25, Questionable: 60, IR: 5 };
     const injuryRiskScore = injMap[injStatus] ?? (injStatus ? 50 : 90);
@@ -65,6 +65,9 @@ export const PlayerIntelligence = {
     const ppg  = projData
       ? parseFloat(SleeperService.calcPPG(projData, scoring).toFixed(1))
       : parseFloat(seasonAvg.toFixed(1));
+    const ppgSource = projData   ? "sleeper_proj"
+                    : seasonAvg > 0 ? "season_avg"
+                    : "pos_estimate";
 
     // ── ADP from FantasyCalc (real pick numbers, not trade values) ────────
     // fcValue.adp     = overallPick  — mean overall pick number across drafts
@@ -90,7 +93,7 @@ export const PlayerIntelligence = {
       name: sp.full_name || sp.first_name + " " + sp.last_name,
       pos, team, ppg, seasonAvg, last4Avg, last8Avg,
       trendDir, trendPct, oppScore, consistencyScore,
-      boomPct, bustPct, sosScore, playoffSosScore, injuryRiskScore,
+      boomPct, bustPct, sosScore, playoffSosScore, bye: byeWeekMap[sp.team] || sp.bye_week || null, injuryRiskScore,
       matchupGrade, rawDefRank, oppTeam, adp: resolvedAdp, fcVal, injStatus, scores,
     });
 
@@ -103,7 +106,7 @@ export const PlayerIntelligence = {
       id:              sp.player_id || sp.sleeper_id,
       sleeperPlayerId: sp.player_id,
       name:            sp.full_name || `${sp.first_name || ""} ${sp.last_name || ""}`.trim(),
-      pos, team, ppg,
+      pos, team, ppg, ppgSource,
       // ADP: real pick number from FantasyCalc, or positional estimate, or null
       adp:             resolvedAdp,
       adpSource:       adp !== null ? "fantasycalc" : fallbackAdp !== null ? "estimated" : null,
@@ -119,7 +122,7 @@ export const PlayerIntelligence = {
       trendPct:        parseFloat(trendPct.toFixed(1)),
       opportunityScore: Math.max(0, Math.min(100, oppScore)),
       consistencyScore,
-      boomPct, bustPct, sosScore, playoffSosScore, injuryRiskScore,
+      boomPct, bustPct, sosScore, playoffSosScore, bye: byeWeekMap[sp.team] || sp.bye_week || null, injuryRiskScore,
       fcValue:         fcVal,
       history:         this._buildHistory(scores),
       matchup: oppTeam ? {
@@ -146,7 +149,7 @@ export const PlayerIntelligence = {
   },
 
   // ── D/ST compute path ───────────────────────────────────────────────────
-  _computeDST(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank) {
+  _computeDST(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank, byeWeekMap = {}) {
     const scores    = weeklyScores.filter(s => s != null && !isNaN(s));
     const avg       = n => scores.length >= n
       ? scores.slice(-n).reduce((a, b) => a + b, 0) / n
@@ -157,20 +160,30 @@ export const PlayerIntelligence = {
     const last8Avg  = avg(8);
     const trendPct  = last8Avg > 0 ? ((last4Avg - last8Avg) / last8Avg) * 100 : 0;
     const trendDir  = trendPct > 8 ? "up" : trendPct < -8 ? "down" : "same";
-    const ppg       = projData ? parseFloat(SleeperService.calcPPG(projData).toFixed(1))
-                               : parseFloat(seasonAvg.toFixed(1));
+    // Projection priority: Sleeper proj → season avg → positional estimate (never 0)
+    // Elite DSTs average ~9 pts/wk, average ~7 pts/wk, streaming options ~5
+    const _dstProj = projData ? parseFloat(SleeperService.calcPPG(projData).toFixed(1)) : null;
+    const ppg = (_dstProj !== null && _dstProj > 0)
+      ? _dstProj
+      : seasonAvg > 0
+      ? parseFloat(seasonAvg.toFixed(1))
+      : parseFloat(Math.max(4, 8.5 - (positionalRank ? (positionalRank - 1) * 0.12 : 0)).toFixed(1));
+    const ppgSource = (_dstProj !== null && _dstProj > 0) ? "sleeper_proj"
+                    : seasonAvg > 0                        ? "season_avg"
+                    : "pos_estimate";
 
     const team      = sp.team || sp.player_id || "FA";
     const teamName  = sp.full_name || team;
 
-    // DST matchup — offensive rank of opponent (higher = easier matchup)
+    // DST matchup — how many fantasy pts has the opponent's offense allowed DSTs to score?
+    // Rank 1 = opponent allows most DST pts = easiest matchup for our DST
     const oppTeam      = sp.opponent_abbr || null;
-    const rawDefRank   = oppTeam ? (defRanksByPos["QB"]?.[oppTeam] || 16) : 16;
+    const rawDefRank   = oppTeam ? (defRanksByPos["DST"]?.[oppTeam] || 16) : 16;
     const matchupGrade = oppTeam ? defRankToGrade(rawDefRank) : "C";
     const matchupLabel = oppTeam ? defRankToLabel(rawDefRank) : "Neutral";
 
     const sosScore        = oppTeam ? Math.round((rawDefRank / 32) * 100) : 50;
-    const playoffSosScore = sosScore;
+    const playoffSosScore = defRanksByPos["DST"] ? Math.round(((32 - (defRanksByPos["DST"][team] || 16)) / 31) * 94 + 3) : sosScore;
     const consistencyScore = scores.length > 1 ? (() => {
       const mean   = seasonAvg;
       const stddev = Math.sqrt(scores.reduce((s, v) => s + (v - mean) ** 2, 0) / scores.length);
@@ -193,7 +206,7 @@ export const PlayerIntelligence = {
     const aiRec = AIExplanationEngine.generate({
       name: teamName, pos: "DST", team, ppg, seasonAvg, last4Avg, last8Avg,
       trendDir, trendPct, oppScore: 50, consistencyScore,
-      boomPct, bustPct, sosScore, playoffSosScore, injuryRiskScore: 90,
+      boomPct, bustPct, sosScore, playoffSosScore, bye: byeWeekMap[sp.team] || sp.bye_week || null, injuryRiskScore: 90,
       matchupGrade, rawDefRank, oppTeam, adp: resolvedAdp, fcVal, injStatus: null, scores,
     });
 
@@ -203,7 +216,7 @@ export const PlayerIntelligence = {
       name:            teamName,
       pos:             "DST",
       team,
-      ppg,
+      ppg, ppgSource,
       adp:             resolvedAdp,
       adpSource:       adp !== null ? "fantasycalc" : fallbackAdp !== null ? "estimated" : null,
       positionalAdp, adpTrend, adpDelta,
@@ -216,7 +229,7 @@ export const PlayerIntelligence = {
       trendPct:        parseFloat(trendPct.toFixed(1)),
       opportunityScore:  50,
       consistencyScore,
-      boomPct, bustPct, sosScore, playoffSosScore,
+      boomPct, bustPct, sosScore, playoffSosScore, bye: byeWeekMap[sp.team] || sp.bye_week || null,
       injuryRiskScore: 90,
       fcValue:         fcVal,
       history:         this._buildHistory(scores),
@@ -235,7 +248,7 @@ export const PlayerIntelligence = {
   },
 
   // ── Kicker compute path ─────────────────────────────────────────────────
-  _computeK(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank) {
+  _computeK(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank, byeWeekMap = {}) {
     const scores    = weeklyScores.filter(s => s != null && !isNaN(s));
     const avg       = n => scores.length >= n
       ? scores.slice(-n).reduce((a, b) => a + b, 0) / n
@@ -246,8 +259,17 @@ export const PlayerIntelligence = {
     const last8Avg  = avg(8);
     const trendPct  = last8Avg > 0 ? ((last4Avg - last8Avg) / last8Avg) * 100 : 0;
     const trendDir  = trendPct > 8 ? "up" : trendPct < -8 ? "down" : "same";
-    const ppg       = projData ? parseFloat(SleeperService.calcPPG(projData).toFixed(1))
-                               : parseFloat(seasonAvg.toFixed(1));
+    // Projection priority: Sleeper proj → season avg → positional estimate (never 0)
+    // Elite kickers average ~9 pts/wk, average ~7 pts/wk
+    const _kProj = projData ? parseFloat(SleeperService.calcPPG(projData).toFixed(1)) : null;
+    const ppg = (_kProj !== null && _kProj > 0)
+      ? _kProj
+      : seasonAvg > 0
+      ? parseFloat(seasonAvg.toFixed(1))
+      : parseFloat(Math.max(4, 8.0 - (positionalRank ? (positionalRank - 1) * 0.1 : 0)).toFixed(1));
+    const ppgSource = (_kProj !== null && _kProj > 0) ? "sleeper_proj"
+                    : seasonAvg > 0                    ? "season_avg"
+                    : "pos_estimate";
 
     const team      = sp.team || "FA";
     const name      = sp.full_name || `${sp.first_name || ""} ${sp.last_name || ""}`.trim();
@@ -289,7 +311,7 @@ export const PlayerIntelligence = {
     const aiRec = AIExplanationEngine.generate({
       name, pos: "K", team, ppg, seasonAvg, last4Avg, last8Avg,
       trendDir, trendPct, oppScore: 50, consistencyScore,
-      boomPct, bustPct, sosScore, playoffSosScore: sosScore, injuryRiskScore,
+      boomPct, bustPct, sosScore, playoffSosScore: (defRanksByPos["K"] ? Math.round(((32 - (defRanksByPos["K"][sp.team] || 16)) / 31) * 94 + 3) : sosScore), bye: byeWeekMap[sp.team] || sp.bye_week || null, injuryRiskScore,
       matchupGrade, rawDefRank, oppTeam, adp: resolvedAdp, fcVal, injStatus, scores,
     });
 
@@ -299,7 +321,7 @@ export const PlayerIntelligence = {
       name,
       pos:             "K",
       team,
-      ppg,
+      ppg, ppgSource,
       adp:             resolvedAdp,
       adpSource:       adp !== null ? "fantasycalc" : fallbackAdp !== null ? "estimated" : null,
       positionalAdp, adpTrend, adpDelta,
@@ -312,7 +334,7 @@ export const PlayerIntelligence = {
       trendPct:        parseFloat(trendPct.toFixed(1)),
       opportunityScore:  50,
       consistencyScore,
-      boomPct, bustPct, sosScore, playoffSosScore: sosScore,
+      boomPct, bustPct, sosScore, playoffSosScore: (defRanksByPos["K"] ? Math.round(((32 - (defRanksByPos["K"][sp.team] || 16)) / 31) * 94 + 3) : sosScore), bye: byeWeekMap[sp.team] || sp.bye_week || null,
       injuryRiskScore,
       fcValue:         fcVal,
       history:         this._buildHistory(scores),
@@ -334,18 +356,62 @@ export const PlayerIntelligence = {
 
   _positionalAdpFallback(pos, positionalRank) {
     if (!positionalRank || positionalRank < 1) return null;
-    const tables = {
-      QB:  [25, 55, 80, 110, 140, 170, 200],
-      RB:  [5,  15, 28, 42,  58,  75,  95, 115, 140, 165, 190],
-      WR:  [8,  18, 32, 46,  60,  76,  92, 110, 130, 152, 175],
-      TE:  [18, 55, 80, 110, 145, 175, 205],
-      K:   [155, 165, 175, 185, 195, 205],
-      DST: [60,  80, 100, 120, 140, 160, 175, 190, 200, 210],
+    // Linearly interpolate within each tier so every rank gets a unique ADP value.
+    // { min, max, adpMin, adpMax } — rank range maps to ADP range.
+    const tiers = {
+      QB: [
+        { min:1,  max:1,  adpMin:22,  adpMax:22  },
+        { min:2,  max:5,  adpMin:45,  adpMax:75  },
+        { min:6,  max:12, adpMin:80,  adpMax:130 },
+        { min:13, max:24, adpMin:135, adpMax:200 },
+        { min:25, max:99, adpMin:205, adpMax:350 },
+      ],
+      RB: [
+        { min:1,  max:3,  adpMin:3,   adpMax:9   },
+        { min:4,  max:10, adpMin:14,  adpMax:38  },
+        { min:11, max:24, adpMin:42,  adpMax:90  },
+        { min:25, max:40, adpMin:92,  adpMax:140 },
+        { min:41, max:60, adpMin:142, adpMax:180 },
+        { min:61, max:99, adpMin:185, adpMax:280 },
+      ],
+      WR: [
+        { min:1,  max:3,  adpMin:6,   adpMax:14  },
+        { min:4,  max:10, adpMin:18,  adpMax:44  },
+        { min:11, max:24, adpMin:48,  adpMax:92  },
+        { min:25, max:40, adpMin:94,  adpMax:142 },
+        { min:41, max:60, adpMin:144, adpMax:178 },
+        { min:61, max:99, adpMin:182, adpMax:280 },
+      ],
+      TE: [
+        { min:1,  max:1,  adpMin:12,  adpMax:12  },
+        { min:2,  max:5,  adpMin:50,  adpMax:75  },
+        { min:6,  max:12, adpMin:80,  adpMax:125 },
+        { min:13, max:24, adpMin:130, adpMax:185 },
+        { min:25, max:99, adpMin:188, adpMax:320 },
+      ],
+      K: [
+        { min:1,  max:12, adpMin:152, adpMax:175 },
+        { min:13, max:32, adpMin:177, adpMax:210 },
+        { min:33, max:99, adpMin:212, adpMax:280 },
+      ],
+      DST: [
+        { min:1,  max:5,  adpMin:55,  adpMax:90  },
+        { min:6,  max:12, adpMin:95,  adpMax:130 },
+        { min:13, max:20, adpMin:135, adpMax:165 },
+        { min:21, max:32, adpMin:168, adpMax:200 },
+        { min:33, max:99, adpMin:202, adpMax:270 },
+      ],
     };
-    const table = tables[pos];
-    if (!table) return null;
-    const idx = Math.min(positionalRank - 1, table.length - 1);
-    return table[idx];
+    const posTable = tiers[pos];
+    if (!posTable) return null;
+    for (const tier of posTable) {
+      if (positionalRank >= tier.min && positionalRank <= tier.max) {
+        if (tier.min === tier.max) return tier.adpMin;
+        const t = (positionalRank - tier.min) / (tier.max - tier.min);
+        return parseFloat((tier.adpMin + t * (tier.adpMax - tier.adpMin)).toFixed(1));
+      }
+    }
+    return null;
   },
 
   _buildHistory(scores) {
@@ -386,17 +452,93 @@ export const PlayerIntelligence = {
 };
 
 export function computeDefensiveRankings(weeklyStatsArray, sleeperPlayers) {
-  const fallbackRanks = {};
-  const positions = ["QB", "RB", "WR", "TE"];
   const NFL_TEAMS = [
     "ARI","ATL","BAL","BUF","CAR","CHI","CIN","CLE","DAL","DEN",
     "DET","GB","HOU","IND","JAX","KC","LAC","LAR","LV","MIA",
     "MIN","NE","NO","NYG","NYJ","PHI","PIT","SEA","SF","TB","TEN","WAS",
   ];
-  positions.forEach(p => {
-    fallbackRanks[p] = {};
-    const shuffled = [...NFL_TEAMS].sort(() => Math.sin(p.charCodeAt(0) * 17) - 0.3);
-    shuffled.forEach((team, idx) => { fallbackRanks[p][team] = idx + 1; });
+
+  // Build team → player_id map for every position so we can sum pts allowed
+  const teamPlayers = {}; // { team: { QB: [pid,...], RB: [...], ... } }
+  Object.entries(sleeperPlayers).forEach(([pid, sp]) => {
+    const team = sp.team;
+    const pos  = sp.position === "DEF" ? "DST" : sp.position;
+    if (!team || !["QB","RB","WR","TE","K","DST"].includes(pos)) return;
+    if (!teamPlayers[team]) teamPlayers[team] = {};
+    if (!teamPlayers[team][pos]) teamPlayers[team][pos] = [];
+    teamPlayers[team][pos].push(pid);
   });
-  return fallbackRanks;
+
+  // Accumulate fantasy points scored BY each team's players AT EACH POSITION
+  // (= points ALLOWED by the opponent defense for that position group)
+  const ptsScored = {}; // { team: { QB: total, RB: total, ... } }
+  NFL_TEAMS.forEach(t => {
+    ptsScored[t] = { QB: 0, RB: 0, WR: 0, TE: 0, K: 0, DST: 0 };
+  });
+
+  weeklyStatsArray.forEach(weekStats => {
+    if (!weekStats) return;
+    Object.entries(weekStats).forEach(([pid, stats]) => {
+      const sp   = sleeperPlayers[pid];
+      const team = sp?.team;
+      const pos  = sp?.position === "DEF" ? "DST" : sp?.position;
+      if (!team || !ptsScored[team] || !["QB","RB","WR","TE","K","DST"].includes(pos)) return;
+      // Kicker: sum FG/XP pts
+      if (pos === "K") {
+        const kPts =
+          (stats.xpm       || 0) * 1 +
+          (stats.fgm_0_19  || 0) * 3 +
+          (stats.fgm_20_29 || 0) * 3 +
+          (stats.fgm_30_39 || 0) * 3 +
+          (stats.fgm_40_49 || 0) * 4 +
+          (stats.fgm_50p   || 0) * 5 +
+          ((!stats.fgm_0_19 && !stats.fgm_20_29) ? (stats.fgm || 0) * 3 : 0);
+        ptsScored[team].K += kPts;
+        return;
+      }
+      // DST: pts allowed (inverted — higher pts allowed = worse defense = easier matchup)
+      if (pos === "DST") {
+        const ptsAllowed = stats.pts_allow ?? stats.pts_allowed ?? 0;
+        // Convert pts_allowed back to fantasy pts to keep units consistent
+        const dstFantasyPts =
+          (ptsAllowed === 0 ? 10 : ptsAllowed <= 6 ? 7 : ptsAllowed <= 13 ? 4
+            : ptsAllowed <= 20 ? 1 : ptsAllowed <= 27 ? 0 : ptsAllowed <= 34 ? -1 : -4) +
+          (stats.sack      || 0) * 1 +
+          (stats.int       || 0) * 2 +
+          (stats.fum_rec   || 0) * 2 +
+          (stats.safe      || 0) * 2 +
+          (stats.blk_kick  || 0) * 2 +
+          (stats.def_td    || 0) * 6 +
+          (stats.def_st_td || 0) * 6;
+        // Store as NEGATIVE so that a lower (worse) DST score = higher rank number = easier to score against
+        ptsScored[team].DST += -dstFantasyPts; // negative: worse DST = higher value = easier opp
+        return;
+      }
+      // Skill players: standard PPR
+      const skillPts =
+        (stats.pass_yd  || 0) * 0.04 +
+        (stats.pass_td  || 0) * 4 +
+        (stats.pass_int || 0) * -2 +
+        (stats.rush_yd  || 0) * 0.1 +
+        (stats.rush_td  || 0) * 6 +
+        (stats.rec_yd   || 0) * 0.1 +
+        (stats.rec_td   || 0) * 6 +
+        (stats.rec      || 0) * 1 +
+        (stats.fum_lost || 0) * -2;
+      ptsScored[team][pos] = (ptsScored[team][pos] || 0) + skillPts;
+    });
+  });
+
+  // Rank teams by pts scored (desc) = pts allowed BY opponent defense.
+  // Rank 1 = most pts allowed = easiest matchup.
+  const ranks = {};
+  ["QB","RB","WR","TE","K","DST"].forEach(pos => {
+    const sorted = [...NFL_TEAMS].sort((a, b) =>
+      (ptsScored[b]?.[pos] ?? 0) - (ptsScored[a]?.[pos] ?? 0)
+    );
+    ranks[pos] = {};
+    sorted.forEach((team, idx) => { ranks[pos][team] = idx + 1; });
+  });
+
+  return ranks;
 }

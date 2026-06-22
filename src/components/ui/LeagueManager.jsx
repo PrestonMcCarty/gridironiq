@@ -47,7 +47,9 @@ export const LeagueManager = () => {
     try {
       const results = await SleeperAdapter.getLeaguesForUser({ username: username.trim() });
       if (!results.length) { setError("No leagues found for this user"); return; }
-      setFound(results.map(l => ({ ...l, _userId: l._raw?.userId || null })));
+      // userId is already on each result (set by SleeperAdapter.getLeaguesForUser)
+      // Previously read l._raw?.userId which is always undefined — fixed here
+      setFound(results.map(l => ({ ...l, _userId: l.userId || null })));
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   };
@@ -57,8 +59,15 @@ export const LeagueManager = () => {
     if (!leagueId.trim()) { setError("Enter a League ID"); return; }
     setLoading(true); reset();
     try {
-      await addSleeperLeague(leagueId.trim(), null, null);
-      setSuccess("Sleeper league connected!"); setLeagueId("");
+      // Look up userId from username if provided — required for correct team identification
+      let resolvedUserId = null;
+      if (username.trim()) {
+        const user = await SleeperAdapter.getUserByUsername(username.trim());
+        if (user?.user_id) resolvedUserId = user.user_id;
+      }
+      await addSleeperLeague(leagueId.trim(), resolvedUserId, null);
+      setSuccess("Sleeper league connected!" + (resolvedUserId ? "" : " ⚠ No username provided — team auto-assigned. Edit league to fix."));
+      setLeagueId("");
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   };
@@ -262,6 +271,9 @@ export const LeagueManager = () => {
                 )}
                 {tab === "id" && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <input value={username} onChange={e => setUsername(e.target.value)}
+                      placeholder="Your Sleeper username (for team identification)"
+                      style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 7, padding: "7px 12px", color: C.text, fontSize: 12, outline: "none" }} />
                     <div style={{ display: "flex", gap: 8 }}>
                       <input value={leagueId} onChange={e => setLeagueId(e.target.value)} onKeyDown={e => e.key === "Enter" && connectSleeperById()}
                         placeholder="Sleeper League ID from URL" style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 7, padding: "7px 12px", color: C.text, fontSize: 12, outline: "none" }} />
@@ -271,7 +283,8 @@ export const LeagueManager = () => {
                       </button>
                     </div>
                     <div style={{ fontSize: 10, color: C.muted }}>
-                      Find it in the Sleeper URL: <span style={{ fontFamily: "monospace", color: C.text }}>sleeper.com/leagues/<span style={{ color: C.accent }}>LEAGUE_ID</span></span>
+                      League ID: <span style={{ fontFamily: "monospace", color: C.text }}>sleeper.com/leagues/<span style={{ color: C.accent }}>LEAGUE_ID</span></span>
+                      {" · "}Username needed to identify your team correctly.
                     </div>
                   </div>
                 )}

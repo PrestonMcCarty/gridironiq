@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "build:historical": "node scripts/build_historical_2024.mjs",
+    "build:historical:refresh": "node scripts/build_historical_2024.mjs --force-refresh",
+    "build:historical:dry": "node scripts/build_historical_2024.mjs --dry-run"
   },
   "dependencies": {
     "next": "14.2.5",
