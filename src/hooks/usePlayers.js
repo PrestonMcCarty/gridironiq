@@ -102,10 +102,11 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
           if (p.team) return true;
 
           // Keep unsigned/free-agent players only when Sleeper's search_rank is
-          // <= 500. This preserves high-profile players likely to sign mid-season
-          // (e.g. Keenan Allen, Ezekiel Elliott) while dropping the ~2,700
-          // retired and low-relevance historical records that have no team.
-          return p.search_rank != null && p.search_rank <= 500;
+          // <= 500 AND status is still "Active". This drops Sleeper-confirmed
+          // retired/inactive players (status="Inactive" or "Injured Reserve"
+          // with no team) while preserving genuine free agents likely to sign
+          // mid-season (e.g. Keenan Allen, Ezekiel Elliott).
+          return p.search_rank != null && p.search_rank <= 500 && p.status === "Active";
         })
         .sort((a, b) => {
           // Sort priority:
