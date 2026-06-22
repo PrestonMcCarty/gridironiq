@@ -98,11 +98,14 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
           // Explicitly retired/suspended players are excluded
           if (p.status && EXCLUDE_STATUSES.has(p.status)) return false;
 
-          // Players with no status at all who also have no team and no
-          // depth_chart_order are historical records — exclude them.
-          if (!p.status && !p.team && !p.depth_chart_order && !p.search_rank) return false;
+          // Keep if on an active NFL roster — covers starters, backups, IR, PS, PUP.
+          if (p.team) return true;
 
-          return true;
+          // Keep unsigned/free-agent players only when Sleeper's search_rank is
+          // <= 500. This preserves high-profile players likely to sign mid-season
+          // (e.g. Keenan Allen, Ezekiel Elliott) while dropping the ~2,700
+          // retired and low-relevance historical records that have no team.
+          return p.search_rank != null && p.search_rank <= 500;
         })
         .sort((a, b) => {
           // Sort priority:
