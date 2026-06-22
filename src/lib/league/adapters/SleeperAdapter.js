@@ -201,7 +201,8 @@ export const SleeperAdapter = {
       const mine = rosters.find(r => String(r.ownerId) === String(userId));
       if (mine) myTeamId = mine.teamId;
     }
-    if (!myTeamId && rosters.length) myTeamId = rosters[0].teamId;
+    // No fallback to rosters[0] — if ownership cannot be determined, return null.
+    // useLeagueStore will surface a clear error rather than silently showing the wrong team.
 
     // Transactions in background
     let transactions = [];

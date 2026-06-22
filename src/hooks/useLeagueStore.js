@@ -117,8 +117,8 @@ export function useLeagueStore() {
       // Failing loudly here prevents wrong-team data from silently propagating
       // to My Team, Lineup, Trade Finder, and Team Analyzer.
       if (!league.userId) {
-        const msg = `Could not identify your team in "${league.name}" — no Sleeper user ID stored. Remove this league and reconnect using your Sleeper username.`;
-        console.error(`[LeagueStore] ✗ ${msg}`);
+        const msg = `Unable to determine which roster belongs to you. Please provide your Sleeper username.`;
+        console.error(`[LeagueStore] ✗ ${league.name}: ${msg}`);
         setLeagueError(msg);
         setLeagueLoading(false);
         return;
@@ -127,9 +127,9 @@ export function useLeagueStore() {
       // Verify userId actually appears in this league's rosters
       const ownerIds = data.rosters.map((r) => String(r.ownerId));
       if (!ownerIds.includes(String(league.userId))) {
-        const msg = `Your Sleeper user ID (${league.userId}) was not found in this league's rosters. You may not be a member of this league, or the league ID is incorrect. Owner IDs in league: [${ownerIds.join(', ')}]`;
-        console.error(`[LeagueStore] ✗ ${msg}`);
-        setLeagueError(`Could not find your team in "${league.name}". Check that you are a member of this league.`);
+        const msg = `Unable to determine which roster belongs to you. Your Sleeper user ID was not found in this league's rosters — you may not be a member, or the wrong username was used.`;
+        console.error(`[LeagueStore] ✗ ${league.name}: userId=${league.userId} not in [${ownerIds.join(', ')}]`);
+        setLeagueError(msg);
         setLeagueLoading(false);
         return;
       }

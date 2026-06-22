@@ -186,7 +186,7 @@ export const ESPNAdapter = {
       );
       if (mine) myTeamId = String(mine.id);
     }
-    if (!myTeamId && rosters.length) myTeamId = rosters[0].teamId;
+    // No fallback to rosters[0] — return null if ownership cannot be determined.
 
     // Matchups
     const matchups = {};
@@ -229,17 +229,24 @@ export const ESPNAdapter = {
   },
 
   getMyRosterIds(data, userId) {
-    if (!data?.rosters?.length) return [];
-    const mine = data.rosters.find(r => String(r.ownerId) === String(userId))
-      || data.rosters[0];
+    if (!data?.rosters?.length || !userId) return [];
+    const mine = data.rosters.find(r => String(r.ownerId) === String(userId));
+    if (!mine) {
+      console.warn(`[ESPNAdapter] getMyRosterIds: userId ${userId} not found in ${data.rosters.length} rosters`);
+      return [];
+    }
     // ESPN player IDs are numeric strings — they won't directly match Sleeper IDs.
     // The UI layer must cross-reference by player name to resolve to Sleeper IDs.
-    return mine?.playerIds || [];
+    return mine.playerIds || [];
   },
 
   getMyTeamId(data, userId) {
-    if (!data?.rosters?.length) return null;
+    if (!data?.rosters?.length || !userId) return null;
     const mine = data.rosters.find(r => String(r.ownerId) === String(userId));
-    return mine?.teamId || data.rosters[0]?.teamId || null;
+    if (!mine) {
+      console.warn(`[ESPNAdapter] getMyTeamId: userId ${userId} not found in rosters`);
+      return null;
+    }
+    return mine.teamId || null;
   },
 };

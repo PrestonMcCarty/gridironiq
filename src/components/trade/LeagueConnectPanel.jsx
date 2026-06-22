@@ -10,12 +10,13 @@ import { SleeperAdapter } from "@/lib/league/adapters/SleeperAdapter";
  * All state management delegates to addLeague in PlayersCtx via onLeagueLoaded.
  */
 export const LeagueConnectPanel = ({ onLeagueLoaded }) => {
-  const [username, setUsername] = useState("");
-  const [leagueId, setLeagueId] = useState("");
-  const [leagues,  setLeagues]  = useState([]);
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState(null);
-  const [step,     setStep]     = useState("input");
+  const [username,      setUsername]      = useState("");
+  const [leagueId,      setLeagueId]      = useState("");
+  const [directUsername, setDirectUsername] = useState("");
+  const [leagues,       setLeagues]       = useState([]);
+  const [loading,       setLoading]       = useState(false);
+  const [error,         setError]         = useState(null);
+  const [step,          setStep]          = useState("input");
 
   const lookupUser = async () => {
     if (!username.trim()) { setError("Enter your Sleeper username"); return; }
@@ -31,11 +32,21 @@ export const LeagueConnectPanel = ({ onLeagueLoaded }) => {
 
   const connectDirect = async () => {
     if (!leagueId.trim()) { setError("Enter a League ID"); return; }
+    if (!directUsername.trim()) {
+      setError("Enter your Sleeper username so your roster can be identified.");
+      return;
+    }
     setLoading(true); setError(null);
     try {
+      // Resolve username → user_id before importing so ownership can be verified
+      const user = await SleeperAdapter.getUserByUsername(directUsername.trim());
+      if (!user?.user_id) {
+        setError(`Sleeper username "${directUsername.trim()}" not found.`);
+        setLoading(false); return;
+      }
       const info = await SleeperAdapter.getLeagueInfo(leagueId.trim());
       if (!info) { setError("League not found — check the ID"); setLoading(false); return; }
-      onLeagueLoaded(leagueId.trim(), null, info._raw || info);
+      onLeagueLoaded(leagueId.trim(), user.user_id, info._raw || info);
       setStep("done");
     } catch (e) { setError(e.message); }
     setLoading(false);
@@ -71,8 +82,10 @@ export const LeagueConnectPanel = ({ onLeagueLoaded }) => {
             <div style={{ flex: 1, height: 1, background: C.border }} />
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <input value={leagueId} onChange={e => setLeagueId(e.target.value)} onKeyDown={e => e.key === "Enter" && connectDirect()}
+            <input value={leagueId} onChange={e => setLeagueId(e.target.value)}
               placeholder="Sleeper League ID from URL" style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 7, padding: "7px 12px", color: C.text, fontSize: 12, outline: "none", flex: "1 1 200px" }} />
+            <input value={directUsername} onChange={e => setDirectUsername(e.target.value)} onKeyDown={e => e.key === "Enter" && connectDirect()}
+              placeholder="Your Sleeper username" style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 7, padding: "7px 12px", color: C.text, fontSize: 12, outline: "none", flex: "1 1 160px" }} />
             <button onClick={connectDirect} disabled={loading} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 7, padding: "7px 14px", fontSize: 12, color: C.muted, cursor: "pointer", fontWeight: 700, whiteSpace: "nowrap", opacity: loading ? 0.6 : 1 }}>
               Connect
             </button>

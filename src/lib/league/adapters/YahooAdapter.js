@@ -194,7 +194,7 @@ export const YahooAdapter = {
       const mine = rosters.find(r => String(r.ownerId) === String(userId));
       if (mine) myTeamId = mine.teamId;
     }
-    if (!myTeamId && rosters.length) myTeamId = rosters[0].teamId;
+    // No fallback to rosters[0] — return null if ownership cannot be determined.
 
     // Transactions
     let transactions = [];
@@ -235,15 +235,22 @@ export const YahooAdapter = {
   },
 
   getMyRosterIds(data, userId) {
-    if (!data?.rosters?.length) return [];
-    const mine = data.rosters.find(r => String(r.ownerId) === String(userId))
-      || data.rosters[0];
-    return mine?.playerIds || [];
+    if (!data?.rosters?.length || !userId) return [];
+    const mine = data.rosters.find(r => String(r.ownerId) === String(userId));
+    if (!mine) {
+      console.warn(`[YahooAdapter] getMyRosterIds: userId ${userId} not found in ${data.rosters.length} rosters`);
+      return [];
+    }
+    return mine.playerIds || [];
   },
 
   getMyTeamId(data, userId) {
-    if (!data?.rosters?.length) return null;
+    if (!data?.rosters?.length || !userId) return null;
     const mine = data.rosters.find(r => String(r.ownerId) === String(userId));
-    return mine?.teamId || data.rosters[0]?.teamId || null;
+    if (!mine) {
+      console.warn(`[YahooAdapter] getMyTeamId: userId ${userId} not found in rosters`);
+      return null;
+    }
+    return mine.teamId || null;
   },
 };
