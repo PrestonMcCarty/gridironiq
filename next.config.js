@@ -11,6 +11,14 @@ const nextConfig = {
       },
     ];
   },
+
+  webpack(config) {
+    // Webpack's module concatenation (scope hoisting) can produce TDZ errors
+    // when merged modules have an initialization order dependency.
+    // Disabling it trades a marginal bundle-size increase for stability.
+    config.optimization.concatenateModules = false;
+    return config;
+  },
 };
 
 module.exports = nextConfig;
