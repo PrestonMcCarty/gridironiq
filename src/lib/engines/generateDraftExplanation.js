@@ -77,7 +77,7 @@ export function generateDraftExplanation(player, context = {}) {
   ).sort((a, b) => (a.adp ?? 999) - (b.adp ?? 999));
 
   // ADP value
-  const adpValue  = (p.adp && p.adpSource === "fantasycalc") ? Math.round(p.adp - pick) : null;
+  const adpValue  = (p.adp && p.adpSource === "fantasycalc_rank") ? Math.round(p.adp - pick) : null;
   const havePos   = myPosCounts[p.pos] || 0;
   const needPos   = Math.max(0, (settings.slots[p.pos] || 0) + (["RB","WR","TE"].includes(p.pos) ? (settings.slots.FLEX || 0) * 0.4 : 0) - havePos);
   const rounds    = settings.slots ? Object.values(settings.slots).reduce((a, b) => a + b, 0) : 16;

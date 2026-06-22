@@ -234,8 +234,8 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
       //   4. Tiebreak within same ADP: higher ppg = better rank
 
       enriched.sort((a, b) => {
-        const aHasReal = a.adpSource === "fantasycalc";
-        const bHasReal = b.adpSource === "fantasycalc";
+        const aHasReal = a.adpSource === "fantasycalc_rank";
+        const bHasReal = b.adpSource === "fantasycalc_rank";
         const aHasEst  = a.adp != null;
         const bHasEst  = b.adp != null;
 

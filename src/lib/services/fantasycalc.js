@@ -85,24 +85,21 @@ export const FantasyCalcService = {
         const rawName  = d.player.name  || "";
         const position = d.player.position || "";
 
-        // ── Real ADP from FantasyCalc's overallPick field ──────────────
-        // overallPick is the mean overall pick number across recent
-        // real drafts tracked by FantasyCalc. This is the correct ADP.
-        // The old formula (1001 - redraftValue) / 10 was wrong —
-        // redraftValue is a trade value score, NOT a pick number.
-        const overallAdp    = typeof d.overallPick    === "number" ? d.overallPick    : null;
-        const positionalAdp = typeof d.positionalPick === "number" ? d.positionalPick : null;
+        // ── ADP from FantasyCalc's overallRank ────────────────────────
+        // FC's overallPick / positionalPick fields no longer exist in the
+        // free API response. overallRank (1-200) is the closest ordinal
+        // proxy: multiply by 1.1 to produce a pick-number-scale value that
+        // fits a standard 12-team 20-round draft (~240 picks total).
+        // positionRank is the within-position rank (also non-null for all 200).
+        const overallAdp    = typeof d.overallRank   === "number" ? parseFloat((d.overallRank   * 1.1).toFixed(1)) : null;
+        const positionalAdp = typeof d.positionRank  === "number" ? d.positionRank  : null;
 
-        // adpDelta: negative = rising (being drafted earlier), positive = falling
-        const adpDelta = typeof d.adpDelta === "number" ? d.adpDelta : null;
-        const adpTrend = adpDelta === null   ? null
-          : adpDelta < -0.5 ? "rising"
-          : adpDelta >  0.5 ? "falling"
-          : "stable";
+        // adpDelta / adpTrend: FC no longer publishes pick-delta, use value trend
+        const adpDelta = null;
+        const adpTrend = d.trend30Day > 50 ? "rising" : d.trend30Day < -50 ? "falling" : "stable";
 
-        // Positional rank within this response (1-based) as a fallback
-        // for computing approximate ADP when overallPick is missing
-        const positionalRank = positionalAdp ? Math.ceil(positionalAdp) : null;
+        // Positional rank for the fallback ADP tier table (used by playerIntelligence)
+        const positionalRank = typeof d.positionRank === "number" ? d.positionRank : null;
 
         return {
           name:           rawName,

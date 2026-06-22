@@ -31,7 +31,7 @@ export function computeDataHealth(players, meta = {}) {
   const recency   = Math.max(0, Math.round(100 - (ageMin / 60) * 20)); // -20pts/hr
 
   // ── Agreement score ──────────────────────────────────────────────────────
-  const fcCount      = players.filter(p => p.adpSource === "fantasycalc").length;
+  const fcCount      = players.filter(p => p.adpSource === "fantasycalc_rank").length;
   const estCount     = players.filter(p => p.adpSource === "estimated").length;
   const derivedCount = players.filter(p => p.adpSource === "derived").length;
   const total        = players.length || 1;

@@ -109,7 +109,7 @@ export const PlayerIntelligence = {
       pos, team, ppg, ppgSource,
       // ADP: real pick number from FantasyCalc, or positional estimate, or null
       adp:             resolvedAdp,
-      adpSource:       adp !== null ? "fantasycalc" : fallbackAdp !== null ? "estimated" : null,
+      adpSource:       adp !== null ? "fantasycalc_rank" : fallbackAdp !== null ? "estimated" : null,
       positionalAdp,
       adpTrend,   // "rising" | "falling" | "stable" | null
       adpDelta,   // raw pick-number movement
@@ -218,7 +218,7 @@ export const PlayerIntelligence = {
       team,
       ppg, ppgSource,
       adp:             resolvedAdp,
-      adpSource:       adp !== null ? "fantasycalc" : fallbackAdp !== null ? "estimated" : null,
+      adpSource:       adp !== null ? "fantasycalc_rank" : fallbackAdp !== null ? "estimated" : null,
       positionalAdp, adpTrend, adpDelta,
       trend:           trendDir,
       injury:          null,
@@ -323,7 +323,7 @@ export const PlayerIntelligence = {
       team,
       ppg, ppgSource,
       adp:             resolvedAdp,
-      adpSource:       adp !== null ? "fantasycalc" : fallbackAdp !== null ? "estimated" : null,
+      adpSource:       adp !== null ? "fantasycalc_rank" : fallbackAdp !== null ? "estimated" : null,
       positionalAdp, adpTrend, adpDelta,
       trend:           trendDir,
       injury,
