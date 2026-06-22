@@ -87,9 +87,9 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
           return { ...sp, player_id: playerId, position: normalizedPos };
         })
         .filter(p => {
-          // D/ST team entries use full_name (team city+name) and position DST.
-          // They have null status — pass them through unconditionally if position is DST.
-          if (p.position === "DST") return !!(p.full_name && p.team);
+          // D/ST entries: Sleeper DEF records have first_name/last_name but no full_name.
+          // team is always present for all 32 NFL teams — use that as the guard.
+          if (p.position === "DST") return !!p.team;
 
           // Skill players and kickers: must have a name and relevant position
           if (!p.full_name) return false;
