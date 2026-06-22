@@ -10,6 +10,37 @@ import { RecCard } from "@/components/player/RecCard";
 import { SleeperSync } from "@/components/player/SleeperSync";
 import { generateDraftExplanation } from "@/lib/engines/generateDraftExplanation";
 
+// ── Helper functions — defined at module scope so they are never in TDZ ───────
+function getTierLabel(pos, posRank) {
+  if (!posRank) return "Late";
+  const tiers = {
+    QB:  [[1,1,"Elite"],[2,3,"Tier 1"],[4,8,"Tier 2"],[9,16,"Tier 3"],[17,99,"Late"]],
+    RB:  [[1,3,"Elite"],[4,8,"Tier 1"],[9,16,"Tier 2"],[17,28,"Tier 3"],[29,99,"Late"]],
+    WR:  [[1,3,"Elite"],[4,8,"Tier 1"],[9,18,"Tier 2"],[19,30,"Tier 3"],[31,99,"Late"]],
+    TE:  [[1,1,"Elite"],[2,4,"Tier 1"],[5,10,"Tier 2"],[11,18,"Tier 3"],[19,99,"Late"]],
+    K:   [[1,5,"Tier 1"],[6,15,"Tier 2"],[16,99,"Late"]],
+    DST: [[1,5,"Tier 1"],[6,12,"Tier 2"],[13,99,"Late"]],
+  };
+  const table = (tiers[pos] || tiers.WR);
+  for (const [min, max, label] of table) { if (posRank >= min && posRank <= max) return label; }
+  return "Late";
+}
+
+function getScarcityLabel(pos, posRank) {
+  if (!posRank) return "Low";
+  const map = {
+    QB:  [[1,2,"Elite"],[3,6,"High"],[7,14,"Medium"],[15,99,"Low"]],
+    RB:  [[1,4,"Elite"],[5,10,"High"],[11,20,"Medium"],[21,99,"Low"]],
+    WR:  [[1,4,"Elite"],[5,12,"High"],[13,24,"Medium"],[25,99,"Low"]],
+    TE:  [[1,2,"Elite"],[3,5,"High"],[6,12,"Medium"],[13,99,"Low"]],
+    K:   [[1,8,"Medium"],[9,99,"Low"]],
+    DST: [[1,8,"Medium"],[9,99,"Low"]],
+  };
+  const table = (map[pos] || map.WR);
+  for (const [min, max, label] of table) { if (posRank >= min && posRank <= max) return label; }
+  return "Low";
+}
+
 export const DraftPage = ({ settings }) => {
   const { players, loading, error, refresh, counts } = usePlayersCtx();
   const [myPickIds,  setMyPickIds]  = useState([]);
@@ -34,6 +65,9 @@ export const DraftPage = ({ settings }) => {
     myPickIds.forEach(id => { const p = players.find(x => x.id === id); if (p) counts[p.pos] = (counts[p.pos] || 0) + 1; });
     return counts;
   }, [myPickIds, players]);
+
+  // ── available must be declared before any useMemo that uses it ───────────
+  const available = players.filter(p => !allDrafted.has(p.id));
 
   // ── BEST AVAILABLE ENGINE ──────────────────────────────────────────────────
   // Pure talent/value score — zero roster context. Factors:
@@ -303,38 +337,6 @@ export const DraftPage = ({ settings }) => {
     };
   }, [available, pick]);
 
-  // ── Helper functions (used by both engines) ────────────────────────────────
-  function getTierLabel(pos, posRank) {
-    if (!posRank) return "Late";
-    const tiers = {
-      QB:  [[1,1,"Elite"],[2,3,"Tier 1"],[4,8,"Tier 2"],[9,16,"Tier 3"],[17,99,"Late"]],
-      RB:  [[1,3,"Elite"],[4,8,"Tier 1"],[9,16,"Tier 2"],[17,28,"Tier 3"],[29,99,"Late"]],
-      WR:  [[1,3,"Elite"],[4,8,"Tier 1"],[9,18,"Tier 2"],[19,30,"Tier 3"],[31,99,"Late"]],
-      TE:  [[1,1,"Elite"],[2,4,"Tier 1"],[5,10,"Tier 2"],[11,18,"Tier 3"],[19,99,"Late"]],
-      K:   [[1,5,"Tier 1"],[6,15,"Tier 2"],[16,99,"Late"]],
-      DST: [[1,5,"Tier 1"],[6,12,"Tier 2"],[13,99,"Late"]],
-    };
-    const table = (tiers[pos] || tiers.WR);
-    for (const [min, max, label] of table) { if (posRank >= min && posRank <= max) return label; }
-    return "Late";
-  }
-
-  function getScarcityLabel(pos, posRank) {
-    if (!posRank) return "Low";
-    const map = {
-      QB:  [[1,2,"Elite"],[3,6,"High"],[7,14,"Medium"],[15,99,"Low"]],
-      RB:  [[1,4,"Elite"],[5,10,"High"],[11,20,"Medium"],[21,99,"Low"]],
-      WR:  [[1,4,"Elite"],[5,12,"High"],[13,24,"Medium"],[25,99,"Low"]],
-      TE:  [[1,2,"Elite"],[3,5,"High"],[6,12,"Medium"],[13,99,"Low"]],
-      K:   [[1,8,"Medium"],[9,99,"Low"]],
-      DST: [[1,8,"Medium"],[9,99,"Low"]],
-    };
-    const table = (map[pos] || map.WR);
-    for (const [min, max, label] of table) { if (posRank >= min && posRank <= max) return label; }
-    return "Low";
-  }
-
-  const available    = players.filter(p => !allDrafted.has(p.id));
   const filtered     = available.filter(p => posFilter === "ALL" || p.pos === posFilter).filter(p => p.name.toLowerCase().includes(search.toLowerCase())).sort((a, b) => (a.adp ?? 999) - (b.adp ?? 999));
 
   const draft = (id, mine) => {
