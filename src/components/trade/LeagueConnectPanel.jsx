@@ -46,7 +46,7 @@ export const LeagueConnectPanel = ({ onLeagueLoaded }) => {
       }
       const info = await SleeperAdapter.getLeagueInfo(leagueId.trim());
       if (!info) { setError("League not found — check the ID"); setLoading(false); return; }
-      onLeagueLoaded(leagueId.trim(), user.user_id, info._raw || info);
+      onLeagueLoaded(leagueId.trim(), user.user_id, info);
       setStep("done");
     } catch (e) { setError(e.message); }
     setLoading(false);
