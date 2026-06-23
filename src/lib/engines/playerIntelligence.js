@@ -3,13 +3,13 @@ import { AIExplanationEngine } from "@/lib/engines/aiExplanation";
 import { CURRENT_SEASON, defRankToGrade, defRankToLabel } from "@/lib/constants";
 
 export const PlayerIntelligence = {
-  compute(sleeperPlayer, weeklyScores = [], projData = null, fcValue = null, defRanksByPos = {}, scoring = "PPR", nextOpp = null, positionalRank = null, byeWeekMap = {}) {
+  compute(sleeperPlayer, weeklyScores = [], projData = null, fcValue = null, defRanksByPos = {}, scoring = "PPR", nextOpp = null, positionalRank = null, byeWeekMap = {}, fetchedAt = {}) {
     const sp  = sleeperPlayer;
     const pos = sp.position || sp.fantasy_positions?.[0] || "?";
 
     // ── Route DST and K to specialized compute paths ──────────────────────
-    if (pos === "DST") return this._computeDST(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank, byeWeekMap);
-    if (pos === "K")   return this._computeK(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank, byeWeekMap);
+    if (pos === "DST") return this._computeDST(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank, byeWeekMap, fetchedAt);
+    if (pos === "K")   return this._computeK(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank, byeWeekMap, fetchedAt);
 
     // ── Skill player path (QB / RB / WR / TE) ────────────────────────────
     const team = sp.team || sp.fantasy_team || "FA";
@@ -108,12 +108,36 @@ export const PlayerIntelligence = {
 
     const resolvedAdp = adp ?? fallbackAdp;
 
+    // ── Freshness metadata ─────────────────────────────────────────────────
+    const _now = Date.now();
+    const _ageMin = ts => ts ? Math.round((_now - ts) / 60_000) : null;
+    const injuryAgeMinutes     = _ageMin(fetchedAt.players);
+    const projectionAgeMinutes = _ageMin(fetchedAt.projections);
+    const opponentAgeMinutes   = _ageMin(fetchedAt.players);
+    const newsAgeMinutes       = _ageMin(fetchedAt.players);
+
+    const staleFlags = [];
+    const STALE_THRESHOLD_MIN = 30;
+    if (projectionAgeMinutes != null && projectionAgeMinutes > STALE_THRESHOLD_MIN) staleFlags.push("stale_projection");
+    if (injuryAgeMinutes     != null && injuryAgeMinutes     > STALE_THRESHOLD_MIN) staleFlags.push("stale_injury");
+    if (!oppTeam)                                                                    staleFlags.push("missing_opponent");
+
+    const _live = {
+      injuryAgeMinutes,
+      projectionAgeMinutes,
+      newsAgeMinutes,
+      opponentAgeMinutes,
+      lastRefresh: fetchedAt.players ? new Date(fetchedAt.players).toISOString() : null,
+      staleFlags,
+    };
+
     const aiRec = AIExplanationEngine.generate({
       name: sp.full_name || sp.first_name + " " + sp.last_name,
       pos, team, ppg, seasonAvg, last4Avg, last8Avg,
       trendDir, trendPct, oppScore, consistencyScore,
       boomPct, bustPct, sosScore, playoffSosScore, bye: byeWeekMap[sp.team] || sp.bye_week || null, injuryRiskScore,
       matchupGrade, rawDefRank, oppTeam, adp: resolvedAdp, fcVal, injStatus, scores,
+      staleFlags,
     });
 
     // Badge values — each maps to a distinct colour in InjuryBadge:
@@ -163,7 +187,8 @@ export const PlayerIntelligence = {
         detail:   sp.injury_notes || `Listed as ${injStatus}. Check practice reports before starting.`,
         status:   injury,
       } : null,
-      news:            this._buildNews(sp, injStatus),
+      news:            this._buildNews(sp, injStatus, fetchedAt.players),
+      _live,
       aiRecommendation: aiRec,
       _debug: {
         projectionSource:         ppgSource,
@@ -176,13 +201,17 @@ export const PlayerIntelligence = {
         injuryStatus:             injStatus,
         injuryPenaltyApplied:     injStatus ? (isOffseasonInjury ? "offseason_recovery" : injStatus) : "none",
         offseasonInjuryDetected:  isOffseasonInjury,
-        recommendationScoreBreakdown: {
+        staleFlags,
+        newsSource:               "sleeper_player_data",
+        confidenceInputs: {
           baseline:          50,
           opportunityContrib: Math.round(Math.max(0, Math.min(100, oppScore)) * 0.3 * 10) / 10,
           consistencyContrib: Math.round(consistencyScore * 0.15 * 10) / 10,
           boomBustContrib:    Math.round((boomPct - bustPct) * 0.2 * 10) / 10,
           injuryDiscount:    -Math.round((100 - injuryRiskScore) * 0.3 * 10) / 10,
         },
+        penalties: aiRec._penalties || [],
+        bonuses:   aiRec._bonuses   || [],
       },
     };
   },
@@ -201,7 +230,7 @@ export const PlayerIntelligence = {
   },
 
   // ── D/ST compute path ───────────────────────────────────────────────────
-  _computeDST(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank, byeWeekMap = {}) {
+  _computeDST(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank, byeWeekMap = {}, fetchedAt = {}) {
     const scores    = weeklyScores.filter(s => s != null && !isNaN(s));
     const avg       = n => scores.length >= n
       ? scores.slice(-n).reduce((a, b) => a + b, 0) / n
@@ -294,13 +323,21 @@ export const PlayerIntelligence = {
       strengths:       aiRec.strengths,
       weaknesses:      aiRec.riskFactors,
       injuryDetail:    null,
-      news:            [{ text: `${teamName} D/ST — active and healthy.`, source: "sleeper", urgency: "normal", waiver: false }],
+      news:            [{ headline: `${teamName} D/ST — active and healthy.`, text: `${teamName} D/ST — active and healthy.`, timestamp: fetchedAt.players || Date.now(), source: "sleeper", severity: "INFO", urgency: "normal", waiver: false }],
+      _live: {
+        injuryAgeMinutes:    fetchedAt.players    ? Math.round((Date.now() - fetchedAt.players)    / 60_000) : null,
+        projectionAgeMinutes:fetchedAt.projections ? Math.round((Date.now() - fetchedAt.projections) / 60_000) : null,
+        newsAgeMinutes:      fetchedAt.players    ? Math.round((Date.now() - fetchedAt.players)    / 60_000) : null,
+        opponentAgeMinutes:  fetchedAt.players    ? Math.round((Date.now() - fetchedAt.players)    / 60_000) : null,
+        lastRefresh: fetchedAt.players ? new Date(fetchedAt.players).toISOString() : null,
+        staleFlags: [...(!oppTeam ? ["missing_opponent"] : [])],
+      },
       aiRecommendation: aiRec,
     };
   },
 
   // ── Kicker compute path ─────────────────────────────────────────────────
-  _computeK(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank, byeWeekMap = {}) {
+  _computeK(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank, byeWeekMap = {}, fetchedAt = {}) {
     const scores    = weeklyScores.filter(s => s != null && !isNaN(s));
     const avg       = n => scores.length >= n
       ? scores.slice(-n).reduce((a, b) => a + b, 0) / n
@@ -365,11 +402,22 @@ export const PlayerIntelligence = {
       : injStatus === "Questionable"      ? "Q"
       : null;
 
+    const _kNow = Date.now();
+    const _kAgeMin = ts => ts ? Math.round((_kNow - ts) / 60_000) : null;
+    const kInjuryAgeMin  = _kAgeMin(fetchedAt.players);
+    const kProjAgeMin    = _kAgeMin(fetchedAt.projections);
+    const kStaleFlags = [
+      ...(kProjAgeMin != null && kProjAgeMin > 30 ? ["stale_projection"] : []),
+      ...(kInjuryAgeMin != null && kInjuryAgeMin > 30 ? ["stale_injury"] : []),
+      ...(!oppTeam ? ["missing_opponent"] : []),
+    ];
+
     const aiRec = AIExplanationEngine.generate({
       name, pos: "K", team, ppg, seasonAvg, last4Avg, last8Avg,
       trendDir, trendPct, oppScore: 50, consistencyScore,
       boomPct, bustPct, sosScore, playoffSosScore: (defRanksByPos["K"] ? Math.round(((32 - (defRanksByPos["K"][sp.team] || 16)) / 31) * 94 + 3) : sosScore), bye: byeWeekMap[sp.team] || sp.bye_week || null, injuryRiskScore,
       matchupGrade, rawDefRank, oppTeam, adp: resolvedAdp, fcVal, injStatus, scores,
+      staleFlags: kStaleFlags,
     });
 
     return {
@@ -406,7 +454,15 @@ export const PlayerIntelligence = {
         type: injStatus, timeline: sp.injury_notes || "Monitor status",
         detail: `${name} listed as ${injStatus}.`, status: injury,
       } : null,
-      news:            this._buildNews(sp, injStatus),
+      news:            this._buildNews(sp, injStatus, fetchedAt.players),
+      _live: {
+        injuryAgeMinutes:     kInjuryAgeMin,
+        projectionAgeMinutes: kProjAgeMin,
+        newsAgeMinutes:       kInjuryAgeMin,
+        opponentAgeMinutes:   kInjuryAgeMin,
+        lastRefresh: fetchedAt.players ? new Date(fetchedAt.players).toISOString() : null,
+        staleFlags: kStaleFlags,
+      },
       aiRecommendation: aiRec,
     };
   },
@@ -487,27 +543,58 @@ export const PlayerIntelligence = {
     return chunks;
   },
 
-  _buildNews(sp, injStatus) {
-    const news = [];
+  /**
+   * Build a normalized news array for a player.
+   *
+   * Normalized shape:
+   *   { headline, timestamp, source, severity, waiver, urgency }
+   *
+   * severity levels:
+   *   CRITICAL — Out / IR (confirmed absence)
+   *   ALERT    — Doubtful (~50% play rate)
+   *   WATCH    — Questionable (non-offseason, ~78% play rate)
+   *   INFO     — REC (offseason recovery) or healthy
+   *
+   * The legacy `urgency` field is kept alongside `severity` so that
+   * existing consumers (Ticker, NewsItem) continue to work without
+   * a breaking change.
+   */
+  _buildNews(sp, injStatus, fetchedAtMs = null) {
+    const timestamp = fetchedAtMs || Date.now();
+    const name = sp.full_name || `${sp.first_name || ""} ${sp.last_name || ""}`.trim();
     if (injStatus) {
       const isRec = this._isOffseasonInjury(sp);
-      news.push({
-        text:    sp.injury_notes || `${sp.full_name} listed as ${injStatus}. Monitor practice reports.`,
-        source:  "nfl",
-        urgency: (injStatus === "Out" || injStatus === "IR") ? "breaking"
-               : isRec                                       ? "normal"
-               : "high",
-        waiver:  injStatus === "Out" || injStatus === "IR",
-      });
-    } else {
-      news.push({
-        text:    `${sp.full_name} — no injury designation. Active and practicing.`,
-        source:  "sleeper",
-        urgency: "normal",
-        waiver:  false,
-      });
+      const severity =
+          (injStatus === "Out" || injStatus === "IR") ? "CRITICAL"
+        : injStatus === "Doubtful"                    ? "ALERT"
+        : (injStatus === "Questionable" && isRec)     ? "INFO"
+        : injStatus === "Questionable"                ? "WATCH"
+        : "INFO";
+      const urgency =
+          severity === "CRITICAL" ? "breaking"
+        : severity === "ALERT"    ? "high"
+        : severity === "WATCH"    ? "high"
+        : "normal";
+      return [{
+        headline:  sp.injury_notes || `${name} listed as ${injStatus}. Monitor practice reports.`,
+        timestamp,
+        source:    "sleeper",
+        severity,
+        urgency,   // legacy compat
+        waiver:    injStatus === "Out" || injStatus === "IR",
+        // Keep text alias for legacy consumers that read n.text
+        text:      sp.injury_notes || `${name} listed as ${injStatus}. Monitor practice reports.`,
+      }];
     }
-    return news;
+    return [{
+      headline:  `${name} — no injury designation. Active and practicing.`,
+      timestamp,
+      source:    "sleeper",
+      severity:  "INFO",
+      urgency:   "normal",  // legacy compat
+      waiver:    false,
+      text:      `${name} — no injury designation. Active and practicing.`,
+    }];
   },
 };
 

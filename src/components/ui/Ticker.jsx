@@ -8,7 +8,7 @@ export const Ticker = () => {
   const items = useMemo(() => {
     const inj = players.filter(p => p.injury).slice(0, 10)
       .map(p => `${p.injury === "OUT" ? "🔴" : p.injury === "IR" ? "🟣" : "🟡"} ${p.name} — ${p.injury}${p.injuryDetail ? ` (${p.injuryDetail.type})` : ""}`);
-    const brk = players.flatMap(p => p.news || []).filter(n => n.urgency === "breaking").slice(0, 8)
+    const brk = players.flatMap(p => p.news || []).filter(n => n.severity === "CRITICAL" || n.urgency === "breaking").slice(0, 8)
       .map(n => `⚡ ${n.text}`);
     const trd = players.filter(p => p.trend === "up" && !p.injury).slice(0, 5)
       .map(p => `▲ ${p.name} trending — ${p.last4Avg?.toFixed(1) || p.ppg} PPG last 4`);

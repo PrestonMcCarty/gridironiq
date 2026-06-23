@@ -11,7 +11,18 @@ export const cache = {
     return e.val;
   },
   set(key, val, ttlMs = 300_000) {
-    _cache.set(key, { val, exp: Date.now() + ttlMs });
+    _cache.set(key, { val, exp: Date.now() + ttlMs, fetchedAt: Date.now() });
+  },
+  /** Returns epoch ms when key was last fetched, or null if not cached / expired. */
+  getFetchedAt(key) {
+    const e = _cache.get(key);
+    if (!e || Date.now() > e.exp) return null;
+    return e.fetchedAt;
+  },
+  /** Returns age in ms of a cached entry, or Infinity if not cached. */
+  getAge(key) {
+    const t = this.getFetchedAt(key);
+    return t == null ? Infinity : Date.now() - t;
   },
   clear() { _cache.clear(); },
 };

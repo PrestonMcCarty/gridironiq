@@ -3,6 +3,7 @@ export const AIExplanationEngine = {
     // ── Route K and DST to specialized recommendation paths ───────────────
     if (p.pos === "DST") return this._generateDST(p);
     if (p.pos === "K")   return this._generateK(p);
+    const staleFlags = p.staleFlags || [];
 
     // ── Skill player path (QB / RB / WR / TE) ────────────────────────────
     const reasons     = [];
@@ -76,16 +77,26 @@ export const AIExplanationEngine = {
     if (p.consistencyScore < 40) riskFactors.push(`High variance player — inconsistent weekly production`);
     if (p.opportunityScore < 45) riskFactors.push(`Below-average opportunity score — usage concerns`);
 
+    // ── Staleness risk factors ─────────────────────────────────────────────
+    // Added BEFORE verdict so they appear in riskFactors and count toward score.
+    if (staleFlags.includes("stale_projection"))
+      riskFactors.push(`Projection data over 30 min old — confidence reduced`);
+    if (staleFlags.includes("stale_injury"))
+      riskFactors.push(`Injury report over 30 min old — verify current status`);
+    if (staleFlags.includes("missing_opponent"))
+      riskFactors.push(`No opponent data for this week — schedule unconfirmed`);
+
     if (!reasons.length)     reasons.push(`${p.ppg} projected PPG for ${p.pos} this week`);
     if (!riskFactors.length) riskFactors.push(`No major red flags — standard weekly variance applies`);
 
-    const { action, confidence } = this._verdict(p, reasons.length, riskFactors.length);
+    const { action, confidence, _penalties, _bonuses } = this._verdict(p, reasons.length, riskFactors.length, staleFlags);
 
     return {
       action, confidence,
       reasons:     reasons.slice(0, 5),
       riskFactors: riskFactors.slice(0, 3),
       strengths:   reasons.slice(0, 3).map(r => r.split(" — ")[0] || r),
+      _penalties, _bonuses,
     };
   },
 
@@ -131,10 +142,10 @@ export const AIExplanationEngine = {
     if (!reasons.length)     reasons.push(`${p.name} DST — projecting ${p.ppg} pts this week`);
     if (!riskFactors.length) riskFactors.push(`Standard DST variance — monitor game-script`);
 
-    const { action, confidence } = this._verdict({
+    const { action, confidence, _penalties, _bonuses } = this._verdict({
       ...p, opportunityScore: 50, injuryRiskScore: 90,
-    }, reasons.length, riskFactors.length);
-    return { action, confidence, reasons: reasons.slice(0, 5), riskFactors: riskFactors.slice(0, 3), strengths: reasons.slice(0, 3).map(r => r.split(" — ")[0] || r) };
+    }, reasons.length, riskFactors.length, p.staleFlags || []);
+    return { action, confidence, reasons: reasons.slice(0, 5), riskFactors: riskFactors.slice(0, 3), strengths: reasons.slice(0, 3).map(r => r.split(" — ")[0] || r), _penalties, _bonuses };
   },
 
   _generateK(p) {
@@ -173,47 +184,79 @@ export const AIExplanationEngine = {
     if (!reasons.length)     reasons.push(`${p.name} (K) — projecting ${p.ppg} pts this week`);
     if (!riskFactors.length) riskFactors.push(`Standard kicker variance — dependent on offense`);
 
-    const { action, confidence } = this._verdict({
+    const { action, confidence, _penalties, _bonuses } = this._verdict({
       ...p, opportunityScore: 50, injuryRiskScore: p.injuryRiskScore ?? 90,
-    }, reasons.length, riskFactors.length);
-    return { action, confidence, reasons: reasons.slice(0, 5), riskFactors: riskFactors.slice(0, 3), strengths: reasons.slice(0, 3).map(r => r.split(" — ")[0] || r) };
+    }, reasons.length, riskFactors.length, p.staleFlags || []);
+    return { action, confidence, reasons: reasons.slice(0, 5), riskFactors: riskFactors.slice(0, 3), strengths: reasons.slice(0, 3).map(r => r.split(" — ")[0] || r), _penalties, _bonuses };
   },
 
 
-  _verdict(p, reasonCount, riskCount) {
+  _verdict(p, reasonCount, riskCount, staleFlags = []) {
     // ── Safe numeric coercion ─────────────────────────────────────────────
-    // Any value that is undefined, null, or NaN becomes 0.
-    // This is the single point where all upstream undefined/NaN values are
-    // neutralised before they can corrupt the score accumulation.
     const n = v => (typeof v === "number" && isFinite(v)) ? v : 0;
 
-    // ── Resolved inputs ───────────────────────────────────────────────────
-    const opportunityScore  = n(p.opportunityScore);   // 0-100, defaults 0
-    const consistencyScore  = n(p.consistencyScore);   // 0-100, defaults 0
-    const boomPct           = n(p.boomPct);            // 0-100, defaults 0
-    const bustPct           = n(p.bustPct);            // 0-100, defaults 0
-    // injuryRiskScore: undefined < 25 is false in JS, so the early-exit
-    // guard below would silently skip.  Resolve it explicitly first.
-    const injuryRiskScore   = n(p.injuryRiskScore) || 90; // 0-100, defaults 90 (healthy)
+    const opportunityScore = n(p.opportunityScore);
+    const consistencyScore = n(p.consistencyScore);
+    const boomPct          = n(p.boomPct);
+    const bustPct          = n(p.bustPct);
+    const injuryRiskScore  = n(p.injuryRiskScore) || 90;
 
     // ── Early exit for confirmed absence (Out=10, IR=5) ──────────────────
-    // Threshold is 30 — catches Out(10) and IR(5) but NOT Doubtful(35),
-    // which should go through the formula to produce a low (not forced) score.
-    if (injuryRiskScore < 30) return { action: "SIT", confidence: 85 };
+    if (injuryRiskScore < 30) return { action: "SIT", confidence: 85, _penalties: [{ reason: "confirmed_absence", amount: -999 }], _bonuses: [] };
 
     // ── Score accumulation ────────────────────────────────────────────────
+    const _bonuses   = [];
+    const _penalties = [];
+
     let score = 50;
-    score += opportunityScore * 0.3;
-    score += consistencyScore * 0.15;
-    score += (boomPct - bustPct) * 0.2;
-    score += (p.matchupGrade === "A" ? 10 : p.matchupGrade === "B" ? 5 : p.matchupGrade === "D" ? -8 : 0);
-    score += (p.trendDir === "up" ? 5 : p.trendDir === "down" ? -5 : 0);
-    score += (n(reasonCount) - n(riskCount)) * 2;
-    score -= (100 - injuryRiskScore) * 0.3;
+
+    const oppContrib = opportunityScore * 0.3;
+    score += oppContrib;
+    if (oppContrib > 0) _bonuses.push({ reason: "opportunity_score", amount: Math.round(oppContrib * 10) / 10 });
+
+    const consContrib = consistencyScore * 0.15;
+    score += consContrib;
+    if (consContrib > 0) _bonuses.push({ reason: "consistency_score", amount: Math.round(consContrib * 10) / 10 });
+
+    const bbContrib = (boomPct - bustPct) * 0.2;
+    score += bbContrib;
+    if (bbContrib > 0) _bonuses.push({ reason: "boom_bust_spread", amount: Math.round(bbContrib * 10) / 10 });
+    else if (bbContrib < 0) _penalties.push({ reason: "boom_bust_spread", amount: Math.round(bbContrib * 10) / 10 });
+
+    const matchupBonus = p.matchupGrade === "A" ? 10 : p.matchupGrade === "B" ? 5 : p.matchupGrade === "D" ? -8 : 0;
+    score += matchupBonus;
+    if (matchupBonus > 0) _bonuses.push({ reason: `matchup_grade_${p.matchupGrade}`, amount: matchupBonus });
+    else if (matchupBonus < 0) _penalties.push({ reason: `matchup_grade_${p.matchupGrade}`, amount: matchupBonus });
+
+    const trendBonus = p.trendDir === "up" ? 5 : p.trendDir === "down" ? -5 : 0;
+    score += trendBonus;
+    if (trendBonus > 0) _bonuses.push({ reason: "trending_up", amount: trendBonus });
+    else if (trendBonus < 0) _penalties.push({ reason: "trending_down", amount: trendBonus });
+
+    const reasonBonus = (n(reasonCount) - n(riskCount)) * 2;
+    score += reasonBonus;
+    if (reasonBonus > 0) _bonuses.push({ reason: "reason_surplus", amount: Math.round(reasonBonus * 10) / 10 });
+    else if (reasonBonus < 0) _penalties.push({ reason: "risk_surplus", amount: Math.round(reasonBonus * 10) / 10 });
+
+    const injPenalty = -(100 - injuryRiskScore) * 0.3;
+    score += injPenalty;
+    if (injPenalty < 0) _penalties.push({ reason: "injury_risk", amount: Math.round(injPenalty * 10) / 10 });
+
+    // ── Staleness penalties ────────────────────────────────────────────────
+    if (staleFlags.includes("stale_projection")) {
+      score -= 8;
+      _penalties.push({ reason: "stale_projection", amount: -8 });
+    }
+    if (staleFlags.includes("stale_injury")) {
+      score -= 5;
+      _penalties.push({ reason: "stale_injury", amount: -5 });
+    }
+    if (staleFlags.includes("missing_opponent")) {
+      score -= 10;
+      _penalties.push({ reason: "missing_opponent", amount: -10 });
+    }
 
     // ── Final guard ───────────────────────────────────────────────────────
-    // Clamp to [35, 97].  If score is still somehow NaN (should not happen
-    // after the guards above), default to 50 rather than displaying "NaN%".
     const raw  = Math.min(97, Math.max(35, Math.round(score)));
     const conf = isFinite(raw) ? raw : 50;
 
@@ -223,7 +266,7 @@ export const AIExplanationEngine = {
       conf >= 45 ? "NEUTRAL" :
       conf >= 35 ? "LEAN SIT" : "SIT";
 
-    return { action, confidence: conf };
+    return { action, confidence: conf, _penalties, _bonuses };
   },
 
   matchupSummary({ name, pos, oppTeam, rawDefRank, matchupGrade, trendDir }) {
