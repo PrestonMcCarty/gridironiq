@@ -1,12 +1,13 @@
 // ─── IN-MEMORY TTL CACHE ─────────────────────────────────────────────────────
 // Client-side only. In production, replace with Redis or SWR/React Query.
 const _cache = new Map();
+const MISS = Symbol("miss");
 
 export const cache = {
   get(key) {
     const e = _cache.get(key);
-    if (!e) return null;
-    if (Date.now() > e.exp) { _cache.delete(key); return null; }
+    if (!e) return MISS;
+    if (Date.now() > e.exp) { _cache.delete(key); return MISS; }
     return e.val;
   },
   set(key, val, ttlMs = 300_000) {
@@ -17,17 +18,14 @@ export const cache = {
 
 export async function fetchJSON(url, ttlMs = 300_000, label = url) {
   const cached = cache.get(url);
-  if (cached) return cached;
-  try {
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const data = await r.json();
-    cache.set(url, data, ttlMs);
-    return data;
-  } catch (e) {
-    console.warn(`[GridironIQ] fetch failed for ${label}:`, e.message);
-    return null;
-  }
+  if (cached !== MISS) return cached;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`HTTP ${r.status} fetching ${label}`);
+  const data = await r.json();
+  // Don't cache null — a null body means "not found" (e.g. Sleeper unknown username).
+  // Callers that need to distinguish null from error should check the return value.
+  if (data !== null) cache.set(url, data, ttlMs);
+  return data;
 }
 
 export function parseCSV(text) {

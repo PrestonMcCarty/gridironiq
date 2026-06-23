@@ -116,10 +116,12 @@ export const SleeperAdapter = {
    * Look up a Sleeper user by username. Returns the raw user object with user_id.
    */
   async getUserByUsername(username) {
-    return fetchJSON(
+    const user = await fetchJSON(
       `https://api.sleeper.app/v1/user/${username}`,
       3_600_000, `sleeper:user:${username}`
     );
+    if (!user?.user_id) throw new Error(`Sleeper username "${username}" not found.`);
+    return user;
   },
 
   async getLeaguesForUser(credentials) {
