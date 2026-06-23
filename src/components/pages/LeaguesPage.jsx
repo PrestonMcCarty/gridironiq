@@ -149,7 +149,6 @@ const ConnectPanel = () => {
   const { addSleeperLeague, addLeague, PLATFORMS: P } = usePlayersCtx();
 
   const [platform,     setPlatform]     = useState("sleeper");
-  const [tab,          setTab]          = useState("username");
   const [username,     setUsername]     = useState("");
   const [leagueId,     setLeagueId]     = useState("");
   const [espnLeagueId, setEspnLeagueId] = useState("");
@@ -163,37 +162,19 @@ const ConnectPanel = () => {
 
   const reset = () => { setError(null); setSuccess(null); setFound([]); };
 
-  const lookupSleeperUser = async () => {
-    if (!username.trim()) { setError("Enter your Sleeper username"); return; }
+  // Sleeper: League ID + username required. Resolves user_id, verifies membership,
+  // then stores the league. Throws before import if user is not in the league.
+  const connectSleeper = async () => {
+    if (!leagueId.trim())  { setError("Enter your Sleeper League ID."); return; }
+    if (!username.trim())  { setError("Enter your Sleeper username."); return; }
     setLoading(true); reset();
     try {
-      const results = await SleeperAdapter.getLeaguesForUser({ username: username.trim() });
-      if (!results.length) { setError("No leagues found for this user"); return; }
-      setFound(results.map(l => ({ ...l, _userId: l.userId || null })));
-    } catch (e) { setError(e.message); }
-    finally { setLoading(false); }
-  };
-
-  const connectSleeperById = async () => {
-    if (!leagueId.trim()) { setError("Enter a League ID"); return; }
-    setLoading(true); reset();
-    try {
-      let resolvedUserId = null;
-      if (username.trim()) {
-        const user = await SleeperAdapter.getUserByUsername(username.trim());
-        if (user?.user_id) resolvedUserId = user.user_id;
-      }
-      await addSleeperLeague(leagueId.trim(), resolvedUserId, null);
-      setSuccess("League connected!"); setLeagueId("");
-    } catch (e) { setError(e.message); }
-    finally { setLoading(false); }
-  };
-
-  const connectFound = async (info) => {
-    setLoading(true); reset();
-    try {
-      await addSleeperLeague(info.platformLeagueId, info._userId, info);
+      const user = await SleeperAdapter.getUserByUsername(username.trim());
+      await SleeperAdapter.verifyMembership(leagueId.trim(), user.user_id);
+      const info = await SleeperAdapter.getLeagueInfo(leagueId.trim());
+      await addSleeperLeague(leagueId.trim(), user.user_id, info);
       setSuccess(`"${info.name}" connected!`);
+      setLeagueId(""); setUsername("");
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   };
@@ -253,59 +234,23 @@ const ConnectPanel = () => {
         ))}
       </div>
 
-      {/* Sleeper */}
+      {/* Sleeper: League ID + username, both required */}
       {platform === PLATFORMS.SLEEPER && (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ display: "flex", gap: 4 }}>
-            {["username", "id"].map(t => (
-              <button key={t} onClick={() => { setTab(t); reset(); setFound([]); }}
-                style={{ flex: 1, background: tab === t ? "#22C55E18" : C.surface2, border: `1px solid ${tab === t ? C.accent + "50" : C.border}`, borderRadius: 7, padding: "6px", fontSize: 11, fontWeight: 700, color: tab === t ? C.accent : C.muted, cursor: "pointer" }}>
-                {t === "username" ? "By Username" : "By League ID"}
-              </button>
-            ))}
+          <input value={leagueId} onChange={e => setLeagueId(e.target.value)}
+            placeholder="Sleeper League ID (from URL)" style={inputStyle} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <input value={username} onChange={e => setUsername(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && connectSleeper()}
+              placeholder="Your Sleeper username" style={inputStyle} />
+            <button onClick={connectSleeper} disabled={loading}
+              style={{ background: "#22C55E22", border: "1px solid #22C55E50", borderRadius: 8, padding: "8px 16px", fontSize: 12, color: C.accent, cursor: "pointer", fontWeight: 700, whiteSpace: "nowrap", opacity: loading ? 0.6 : 1 }}>
+              {loading ? "…" : "Connect"}
+            </button>
           </div>
-
-          {tab === "username" && (
-            <>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input value={username} onChange={e => setUsername(e.target.value)} onKeyDown={e => e.key === "Enter" && lookupSleeperUser()} placeholder="Your Sleeper username" style={inputStyle} />
-                <button onClick={lookupSleeperUser} disabled={loading}
-                  style={{ background: "#22C55E22", border: "1px solid #22C55E50", borderRadius: 8, padding: "8px 16px", fontSize: 12, color: C.accent, cursor: "pointer", fontWeight: 700, whiteSpace: "nowrap", opacity: loading ? 0.6 : 1 }}>
-                  {loading ? "…" : "Find Leagues"}
-                </button>
-              </div>
-              {found.length > 0 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {found.map(l => (
-                    <button key={l.platformLeagueId} onClick={() => connectFound(l)} disabled={loading}
-                      style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", textAlign: "left", opacity: loading ? 0.6 : 1 }}>
-                      <div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{l.name}</div>
-                        <div style={{ fontSize: 10, color: C.muted, fontFamily: "monospace", marginTop: 2 }}>{l.totalTeams} teams · {l.season} · {l.type}</div>
-                      </div>
-                      <span style={{ color: C.accent, fontSize: 16 }}>+</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-
-          {tab === "id" && (
-            <>
-              <input value={username} onChange={e => setUsername(e.target.value)} placeholder="Your Sleeper username (for team ID)" style={inputStyle} />
-              <div style={{ display: "flex", gap: 8 }}>
-                <input value={leagueId} onChange={e => setLeagueId(e.target.value)} onKeyDown={e => e.key === "Enter" && connectSleeperById()} placeholder="League ID from Sleeper URL" style={inputStyle} />
-                <button onClick={connectSleeperById} disabled={loading}
-                  style={{ background: "#22C55E22", border: "1px solid #22C55E50", borderRadius: 8, padding: "8px 16px", fontSize: 12, color: C.accent, cursor: "pointer", fontWeight: 700, whiteSpace: "nowrap", opacity: loading ? 0.6 : 1 }}>
-                  {loading ? "…" : "Connect"}
-                </button>
-              </div>
-              <div style={{ fontSize: 10, color: C.muted }}>
-                URL format: <span style={{ fontFamily: "monospace", color: C.text }}>sleeper.com/leagues/<span style={{ color: C.accent }}>LEAGUE_ID</span></span>
-              </div>
-            </>
-          )}
+          <div style={{ fontSize: 10, color: C.muted }}>
+            URL format: <span style={{ fontFamily: "monospace", color: C.text }}>sleeper.com/leagues/<span style={{ color: C.accent }}>LEAGUE_ID</span></span>
+          </div>
         </div>
       )}
 
