@@ -33,7 +33,9 @@ export const LineupPage = ({ settings }) => {
     const score = p => {
       let s = p.ppg;
       if (p.injury === "OUT" || p.injury === "IR") return -999;
-      if (p.injury === "Q") s -= 4;
+      if (p.injury === "D")   s -= 4;   // Doubtful — significant penalty
+      if (p.injury === "Q")   s -= 1;   // Questionable — minor caution
+      // REC / PUP: no lineup-score penalty (informational badge only)
       const gc = p.matchup?.grade;
       if (gc === "A") s += 5; if (gc === "B") s += 2; if (gc === "D") s -= 4;
       s += (p.opportunityScore || 50) * 0.05;
@@ -62,7 +64,7 @@ export const LineupPage = ({ settings }) => {
   const starters  = optimal.filter(p => p.slot !== "BN");
   const bench     = optimal.filter(p => p.slot === "BN");
   const projTotal = starters.reduce((s, p) => s + (p.scoreVal > 0 ? p.ppg : 0), 0).toFixed(1);
-  const alerts    = optimal.filter(p => p.slot !== "BN" && (p.injury === "Q" || p.injury === "OUT" || p.injury === "IR"));
+  const alerts    = optimal.filter(p => p.slot !== "BN" && ["Q","D","OUT","IR","REC","PUP"].includes(p.injury));
   const upgrades  = bench.filter(p => p.scoreVal > 0 && starters.some(s => s.pos === p.pos && s.scoreVal < p.scoreVal));
 
   const Row = ({ p }) => {

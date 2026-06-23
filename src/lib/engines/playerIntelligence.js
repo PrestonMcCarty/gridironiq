@@ -14,6 +14,9 @@ export const PlayerIntelligence = {
     // ── Skill player path (QB / RB / WR / TE) ────────────────────────────
     const team = sp.team || sp.fantasy_team || "FA";
     const injStatus = sp.injury_status || null;
+    // Offseason surgical-recovery tags (Sleeper carries these through the entire offseason).
+    // These are NOT active game-week injury concerns — treat as informational only.
+    const isOffseasonInjury = injStatus ? this._isOffseasonInjury(sp) : false;
 
     const scores = weeklyScores.filter(s => s != null && !isNaN(s));
     const avg = n => scores.length >= n
@@ -26,11 +29,23 @@ export const PlayerIntelligence = {
     const trendPct  = last8Avg > 0 ? ((last4Avg - last8Avg) / last8Avg) * 100 : 0;
     const trendDir  = trendPct > 8 ? "up" : trendPct < -8 ? "down" : "same";
 
+    // Tiered opportunity-score injury adjustment — calibrated to actual play-rates:
+    //   Healthy        +15  (bonus for no designation)
+    //   Recovery (REC)   0  (offseason surgical tag; player expected to play week 1)
+    //   Questionable    -5  (~75-80% play rate — small caution only)
+    //   Doubtful       -15  (~50% play rate — significant concern)
+    //   Out / IR / other -20 (confirmed absence)
+    const injOppAdj = !injStatus                          ? 15
+      : isOffseasonInjury                                 ? 0
+      : injStatus === "Questionable"                      ? -5
+      : injStatus === "Doubtful"                          ? -15
+      : -20;
+
     const oppScore = Math.min(100, Math.round(
       (seasonAvg / this._posBaseline(pos)) * 50 +
       (trendDir === "up" ? 15 : trendDir === "down" ? -10 : 5) +
       (scores.length >= 8 ? 10 : scores.length >= 4 ? 5 : 0) +
-      (injStatus ? -20 : 15)
+      injOppAdj
     ));
 
     const mean   = seasonAvg;
@@ -59,8 +74,12 @@ export const PlayerIntelligence = {
     const sosScore        = oppTeam ? Math.round((rawDefRank / 32) * 100) : 50;
     const playoffSosScore = defRanksByPos[pos] ? Math.round(((32 - (defRanksByPos[pos][team] || 16)) / 31) * 94 + 3) : sosScore;
 
-    const injMap = { Out: 10, Doubtful: 25, Questionable: 60, IR: 5 };
-    const injuryRiskScore = injMap[injStatus] ?? (injStatus ? 50 : 90);
+    // injuryRiskScore (0–100): higher = safer to start.
+    // Recalibrated to reflect actual game-day play rates:
+    //   Healthy: 90 | REC: 85 | Q: 78 | PUP: 45 | Doubtful: 35 | Out: 10 | IR: 5
+    const injMap = { Out: 10, IR: 5, Doubtful: 35, Questionable: 78, PUP: 45 };
+    const injuryRiskScore = isOffseasonInjury ? 85
+      : (injMap[injStatus] ?? (injStatus ? 50 : 90));
 
     const ppg  = projData
       ? parseFloat(SleeperService.calcPPG(projData, scoring).toFixed(1))
@@ -97,9 +116,14 @@ export const PlayerIntelligence = {
       matchupGrade, rawDefRank, oppTeam, adp: resolvedAdp, fcVal, injStatus, scores,
     });
 
-    const injury = injStatus === "Out" ? "OUT"
-      : injStatus === "IR" ? "IR"
-      : injStatus === "Questionable" || injStatus === "Doubtful" ? "Q"
+    // Badge values — each maps to a distinct colour in InjuryBadge:
+    //   OUT red | IR purple | D orange | Q yellow | PUP slate | REC blue (offseason recovery)
+    const injury = injStatus === "Out"          ? "OUT"
+      : injStatus === "IR"                      ? "IR"
+      : injStatus === "PUP"                     ? "PUP"
+      : injStatus === "Doubtful"                ? "D"
+      : (injStatus === "Questionable" && isOffseasonInjury) ? "REC"
+      : injStatus === "Questionable"            ? "Q"
       : null;
 
     return {
@@ -142,18 +166,38 @@ export const PlayerIntelligence = {
       news:            this._buildNews(sp, injStatus),
       aiRecommendation: aiRec,
       _debug: {
-        projectionSource:    ppgSource,
-        matchupSource:       oppTeam ? "sleeper_opponent_abbr" : "no_opponent_data",
-        historicalWeeksUsed: scores.length,
-        missingOpponent:     !oppTeam,
-        missingProjection:   !projData,
-        missingStats:        scores.length === 0,
+        projectionSource:         ppgSource,
+        matchupSource:            oppTeam ? "sleeper_opponent_abbr" : "no_opponent_data",
+        historicalWeeksUsed:      scores.length,
+        missingOpponent:          !oppTeam,
+        missingProjection:        !projData,
+        missingStats:             scores.length === 0,
+        injurySource:             injStatus ? "sleeper_player_data" : null,
+        injuryStatus:             injStatus,
+        injuryPenaltyApplied:     injStatus ? (isOffseasonInjury ? "offseason_recovery" : injStatus) : "none",
+        offseasonInjuryDetected:  isOffseasonInjury,
+        recommendationScoreBreakdown: {
+          baseline:          50,
+          opportunityContrib: Math.round(Math.max(0, Math.min(100, oppScore)) * 0.3 * 10) / 10,
+          consistencyContrib: Math.round(consistencyScore * 0.15 * 10) / 10,
+          boomBustContrib:    Math.round((boomPct - bustPct) * 0.2 * 10) / 10,
+          injuryDiscount:    -Math.round((100 - injuryRiskScore) * 0.3 * 10) / 10,
+        },
       },
     };
   },
 
   _posBaseline(pos) {
     return { QB: 22, RB: 16, WR: 14, TE: 10, K: 8, DST: 8 }[pos] || 12;
+  },
+
+  // Returns true when injury_notes/injury_body_part indicate a post-surgery offseason
+  // recovery that Sleeper carries forward as "Questionable" rather than a game-week tag.
+  _isOffseasonInjury(sp) {
+    const notes = (sp.injury_notes        || "").toLowerCase();
+    const part  = (sp.injury_body_part    || "").toLowerCase();
+    const KEYWORDS = ["surgery", "acl", "rehab", "recovery", "physically unable", "pup"];
+    return KEYWORDS.some(kw => notes.includes(kw) || part.includes(kw));
   },
 
   // ── D/ST compute path ───────────────────────────────────────────────────
@@ -282,6 +326,7 @@ export const PlayerIntelligence = {
     const team      = sp.team || "FA";
     const name      = sp.full_name || `${sp.first_name || ""} ${sp.last_name || ""}`.trim();
     const injStatus = sp.injury_status || null;
+    const isOffseasonInjury = injStatus ? this._isOffseasonInjury(sp) : false;
 
     const oppTeam      = sp.opponent_abbr || null;
     const rawDefRank   = oppTeam ? (defRanksByPos["K"]?.[oppTeam] || 16) : 16;
@@ -299,8 +344,9 @@ export const PlayerIntelligence = {
     const boomPct = scores.length ? Math.round(scores.filter(s => s >= 12).length / scores.length * 100) : 0;
     const bustPct = scores.length ? Math.round(scores.filter(s => s <= 3).length  / scores.length * 100) : 0;
 
-    const injMap    = { Out: 10, Doubtful: 25, Questionable: 60, IR: 5 };
-    const injuryRiskScore = injMap[injStatus] ?? (injStatus ? 50 : 90);
+    const injMap    = { Out: 10, IR: 5, Doubtful: 35, Questionable: 78, PUP: 45 };
+    const injuryRiskScore = isOffseasonInjury ? 85
+      : (injMap[injStatus] ?? (injStatus ? 50 : 90));
 
     const adp          = fcValue?.adp          ?? null;
     const positionalAdp= fcValue?.positionalAdp ?? null;
@@ -311,9 +357,12 @@ export const PlayerIntelligence = {
       ? this._positionalAdpFallback("K", positionalRank) : null;
     const resolvedAdp  = adp ?? fallbackAdp;
 
-    const injury = injStatus === "Out" ? "OUT"
-      : injStatus === "IR" ? "IR"
-      : injStatus === "Questionable" || injStatus === "Doubtful" ? "Q"
+    const injury = injStatus === "Out"     ? "OUT"
+      : injStatus === "IR"                 ? "IR"
+      : injStatus === "PUP"               ? "PUP"
+      : injStatus === "Doubtful"          ? "D"
+      : (injStatus === "Questionable" && isOffseasonInjury) ? "REC"
+      : injStatus === "Questionable"      ? "Q"
       : null;
 
     const aiRec = AIExplanationEngine.generate({
@@ -441,10 +490,13 @@ export const PlayerIntelligence = {
   _buildNews(sp, injStatus) {
     const news = [];
     if (injStatus) {
+      const isRec = this._isOffseasonInjury(sp);
       news.push({
         text:    sp.injury_notes || `${sp.full_name} listed as ${injStatus}. Monitor practice reports.`,
         source:  "nfl",
-        urgency: injStatus === "Out" || injStatus === "IR" ? "breaking" : "high",
+        urgency: (injStatus === "Out" || injStatus === "IR") ? "breaking"
+               : isRec                                       ? "normal"
+               : "high",
         waiver:  injStatus === "Out" || injStatus === "IR",
       });
     } else {

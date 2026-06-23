@@ -44,10 +44,17 @@ export const AIExplanationEngine = {
     if (p.pos === "WR" && p.last4Avg >= 20) reasons.push(`Elite receiving usage — ${p.last4Avg.toFixed(1)} PPG last month`);
     if (p.pos === "TE" && p.opportunityScore >= 65) reasons.push(`Elite target share for TE — scarce position value`);
 
+    // Tiered injury risk warnings — aligned with recalibrated injuryRiskScore values:
+    //   < 30  → Out(10), IR(5)        — confirmed absence
+    //   < 55  → Doubtful(35), PUP(45) — significant concern
+    //   < 82  → Questionable(78)      — mild caution (real game-week tag only)
+    //   ≥ 82  → REC(85), Healthy(90)  — no warning (offseason recovery or healthy)
     if (p.injuryRiskScore < 30)
-      riskFactors.push(`${p.injStatus} — significant injury risk, check status`);
-    else if (p.injuryRiskScore < 65)
+      riskFactors.push(`${p.injStatus} — confirmed absence, do not start`);
+    else if (p.injuryRiskScore < 55)
       riskFactors.push(`Injury concern (${p.injStatus}) — monitor practice reports`);
+    else if (p.injuryRiskScore < 82)
+      riskFactors.push(`Q designation (${p.injStatus}) — verify active pre-game`);
 
     if (p.bustPct >= 35)
       riskFactors.push(`${p.bustPct}% bust rate historically — high floor variance`);
@@ -189,10 +196,10 @@ export const AIExplanationEngine = {
     // guard below would silently skip.  Resolve it explicitly first.
     const injuryRiskScore   = n(p.injuryRiskScore) || 90; // 0-100, defaults 90 (healthy)
 
-    // ── Early exit for confirmed injury ──────────────────────────────────
-    // Must come after injuryRiskScore is resolved, not before, so that
-    // undefined injuryRiskScore doesn't bypass the guard.
-    if (injuryRiskScore < 25) return { action: "SIT", confidence: 85 };
+    // ── Early exit for confirmed absence (Out=10, IR=5) ──────────────────
+    // Threshold is 30 — catches Out(10) and IR(5) but NOT Doubtful(35),
+    // which should go through the formula to produce a low (not forced) score.
+    if (injuryRiskScore < 30) return { action: "SIT", confidence: 85 };
 
     // ── Score accumulation ────────────────────────────────────────────────
     let score = 50;

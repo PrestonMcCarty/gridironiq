@@ -4,9 +4,12 @@ import { C, posColor } from "@/lib/theme";
 export const InjuryBadge = ({ status }) => {
   if (!status) return null;
   const m = {
-    OUT: { bg: "#EF444420", bd: "#EF4444", tx: "#EF4444" },
-    Q:   { bg: "#F59E0B20", bd: "#F59E0B", tx: "#F59E0B" },
-    IR:  { bg: "#7C3AED20", bd: "#7C3AED", tx: "#7C3AED" },
+    OUT: { bg: "#EF444420", bd: "#EF4444", tx: "#EF4444" },  // red — confirmed out
+    D:   { bg: "#F9731620", bd: "#F97316", tx: "#F97316" },  // orange — doubtful
+    Q:   { bg: "#F59E0B20", bd: "#F59E0B", tx: "#F59E0B" },  // yellow — questionable
+    IR:  { bg: "#7C3AED20", bd: "#7C3AED", tx: "#7C3AED" },  // purple — injured reserve
+    PUP: { bg: "#64748B20", bd: "#64748B", tx: "#94A3B8" },  // slate — physically unable
+    REC: { bg: "#3B82F620", bd: "#3B82F6", tx: "#60A5FA" },  // blue — offseason recovery
   };
   const c = m[status] || m.Q;
   return (
