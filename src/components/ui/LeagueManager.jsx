@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useState } from "react";
 import { C } from "@/lib/theme";
 import { CloseIcon } from "@/components/ui/Icons";
@@ -25,64 +25,37 @@ export const LeagueManager = () => {
     setShowLeagueManager, PLATFORMS: P,
   } = usePlayersCtx();
 
-  const [platform,  setPlatform]  = useState("sleeper");
-  const [tab,       setTab]       = useState("username");     // sleeper sub-tab
-  const [username,  setUsername]  = useState("");
-  const [leagueId,  setLeagueId]  = useState("");
-  const [espnS2,    setEspnS2]    = useState("");
-  const [swid,      setSwid]      = useState("");
+  const [platform,     setPlatform]     = useState("sleeper");
+  const [username,     setUsername]     = useState("");
+  const [leagueId,     setLeagueId]     = useState("");
+  const [espnS2,       setEspnS2]       = useState("");
+  const [swid,         setSwid]         = useState("");
   const [espnLeagueId, setEspnLeagueId] = useState("");
-  const [yahooToken,setYahooToken]= useState("");
-  const [found,     setFound]     = useState([]);
-  const [loading,   setLoading]   = useState(false);
-  const [error,     setError]     = useState(null);
-  const [success,   setSuccess]   = useState(null);
+  const [yahooToken,   setYahooToken]   = useState("");
+  const [found,        setFound]        = useState([]);
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState(null);
+  const [success,      setSuccess]      = useState(null);
 
   const reset = () => { setError(null); setSuccess(null); setFound([]); };
 
-  // ── Sleeper: lookup by username ─────────────────────────────────────────
-  const lookupSleeperUser = async () => {
-    if (!username.trim()) { setError("Enter your Sleeper username"); return; }
+  // Sleeper: connect by League ID + username (both required)
+  const connectSleeper = async () => {
+    if (!leagueId.trim())  { setError("Enter your Sleeper League ID."); return; }
+    if (!username.trim())  { setError("Enter your Sleeper username."); return; }
     setLoading(true); reset();
     try {
-      const results = await SleeperAdapter.getLeaguesForUser({ username: username.trim() });
-      if (!results.length) { setError("No leagues found for this user"); return; }
-      // userId is already on each result (set by SleeperAdapter.getLeaguesForUser)
-      // Previously read l._raw?.userId which is always undefined — fixed here
-      setFound(results.map(l => ({ ...l, _userId: l.userId || null })));
-    } catch (e) { setError(e.message); }
-    finally { setLoading(false); }
-  };
-
-  // ── Sleeper: connect by ID ──────────────────────────────────────────────
-  const connectSleeperById = async () => {
-    if (!leagueId.trim()) { setError("Enter a League ID"); return; }
-    setLoading(true); reset();
-    try {
-      // Look up userId from username if provided — required for correct team identification
-      let resolvedUserId = null;
-      if (username.trim()) {
-        const user = await SleeperAdapter.getUserByUsername(username.trim());
-        if (user?.user_id) resolvedUserId = user.user_id;
-      }
-      await addSleeperLeague(leagueId.trim(), resolvedUserId, null);
-      setSuccess("Sleeper league connected!" + (resolvedUserId ? "" : " ⚠ No username provided — team auto-assigned. Edit league to fix."));
-      setLeagueId("");
-    } catch (e) { setError(e.message); }
-    finally { setLoading(false); }
-  };
-
-  // ── Sleeper: connect from found list ────────────────────────────────────
-  const connectFound = async (info) => {
-    setLoading(true); reset();
-    try {
-      await addSleeperLeague(info.platformLeagueId, info._userId || null, info);
+      const user = await SleeperAdapter.getUserByUsername(username.trim());
+      await SleeperAdapter.verifyMembership(leagueId.trim(), user.user_id);
+      const info = await SleeperAdapter.getLeagueInfo(leagueId.trim());
+      await addSleeperLeague(leagueId.trim(), user.user_id, info);
       setSuccess(`"${info.name}" connected!`);
+      setLeagueId(""); setUsername("");
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
   };
 
-  // ── ESPN: connect by League ID ──────────────────────────────────────────
+  // ESPN: connect by League ID
   const connectESPN = async () => {
     if (!espnLeagueId.trim()) { setError("Enter your ESPN League ID"); return; }
     setLoading(true); reset();
@@ -102,11 +75,11 @@ export const LeagueManager = () => {
     finally { setLoading(false); }
   };
 
-  // ── Yahoo: initiate OAuth flow ──────────────────────────────────────────
+  // Yahoo: initiate OAuth flow
   const startYahooOAuth = () => {
     const clientId = process.env.NEXT_PUBLIC_YAHOO_CLIENT_ID;
     if (!clientId) {
-      setError("Yahoo OAuth not configured. Add NEXT_PUBLIC_YAHOO_CLIENT_ID to .env.local — see docs.");
+      setError("Yahoo OAuth not configured. Add NEXT_PUBLIC_YAHOO_CLIENT_ID to .env.local");
       return;
     }
     const params = new URLSearchParams({
@@ -119,7 +92,7 @@ export const LeagueManager = () => {
     window.location.href = `https://api.login.yahoo.com/oauth2/request_auth?${params}`;
   };
 
-  // ── Yahoo: connect with access token ────────────────────────────────────
+  // Yahoo: connect with access token
   const connectYahooWithToken = async () => {
     if (!yahooToken.trim()) { setError("Paste your Yahoo access token"); return; }
     setLoading(true); reset();
@@ -152,7 +125,6 @@ export const LeagueManager = () => {
       <div onClick={e => e.stopPropagation()}
         style={{ background: C.surface, borderRadius: 16, border: `1px solid ${C.border}`, width: "100%", maxWidth: 560, maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
 
-        {/* Header */}
         <div style={{ padding: "16px 20px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
           <div>
             <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: C.text }}>League Connector</h2>
@@ -164,7 +136,6 @@ export const LeagueManager = () => {
         </div>
 
         <div style={{ overflowY: "auto", flex: 1 }}>
-          {/* Connected leagues */}
           {leagues.length > 0 && (
             <div style={{ padding: "14px 20px", borderBottom: `1px solid ${C.border}` }}>
               <div style={{ fontSize: 10, fontWeight: 800, color: C.muted, fontFamily: "monospace", letterSpacing: 1.5, marginBottom: 10 }}>
@@ -206,11 +177,9 @@ export const LeagueManager = () => {
             </div>
           )}
 
-          {/* Add league section */}
           <div style={{ padding: "14px 20px" }}>
             <div style={{ fontSize: 10, fontWeight: 800, color: C.muted, fontFamily: "monospace", letterSpacing: 1.5, marginBottom: 12 }}>ADD A LEAGUE</div>
 
-            {/* Platform selector */}
             <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>
               {[
                 { id: PLATFORMS.SLEEPER, label: "💤 Sleeper",       color: PLATFORM_COLORS.sleeper },
@@ -224,86 +193,37 @@ export const LeagueManager = () => {
               ))}
             </div>
 
-            {/* ── Sleeper ── */}
             {platform === PLATFORMS.SLEEPER && (
-              <div>
-                <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
-                  {["username", "id"].map(t => (
-                    <button key={t} onClick={() => { setTab(t); reset(); setFound([]); }}
-                      style={{ flex: 1, background: tab === t ? "#22C55E20" : C.surface2, border: `1px solid ${tab === t ? C.accent + "50" : C.border}`, borderRadius: 6, padding: "5px 0", fontSize: 11, fontWeight: 700, color: tab === t ? C.accent : C.muted, cursor: "pointer" }}>
-                      {t === "username" ? "By Username" : "By League ID"}
-                    </button>
-                  ))}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <input value={leagueId} onChange={e => setLeagueId(e.target.value)}
+                  placeholder="Sleeper League ID (from URL)"
+                  style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 7, padding: "7px 12px", color: C.text, fontSize: 12, outline: "none" }} />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input value={username} onChange={e => setUsername(e.target.value)} onKeyDown={e => e.key === "Enter" && connectSleeper()}
+                    placeholder="Your Sleeper username"
+                    style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 7, padding: "7px 12px", color: C.text, fontSize: 12, outline: "none" }} />
+                  <button onClick={connectSleeper} disabled={loading}
+                    style={{ background: "#22C55E20", border: "1px solid #22C55E50", borderRadius: 7, padding: "7px 14px", fontSize: 12, color: C.accent, cursor: "pointer", fontWeight: 700, opacity: loading ? 0.6 : 1 }}>
+                    {loading ? "…" : "Connect"}
+                  </button>
                 </div>
-                {tab === "username" && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <input value={username} onChange={e => setUsername(e.target.value)} onKeyDown={e => e.key === "Enter" && lookupSleeperUser()}
-                        placeholder="Sleeper username" style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 7, padding: "7px 12px", color: C.text, fontSize: 12, outline: "none" }} />
-                      <button onClick={lookupSleeperUser} disabled={loading}
-                        style={{ background: "#22C55E20", border: "1px solid #22C55E50", borderRadius: 7, padding: "7px 14px", fontSize: 12, color: C.accent, cursor: "pointer", fontWeight: 700, opacity: loading ? 0.6 : 1 }}>
-                        {loading ? "…" : "Find Leagues"}
-                      </button>
-                    </div>
-                    {found.length > 0 && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                        <div style={{ fontSize: 10, color: C.muted, fontFamily: "monospace" }}>Found {found.length} leagues:</div>
-                        {found.map(l => {
-                          const added = alreadyAdded(l.platformLeagueId, PLATFORMS.SLEEPER);
-                          const tc = typeColor(l.type);
-                          return (
-                            <button key={l.platformLeagueId} onClick={() => !added && connectFound(l)} disabled={added || loading}
-                              style={{ background: added ? "#22C55E08" : C.bg, border: `1px solid ${added ? C.accent + "40" : C.border}`, borderRadius: 8, padding: "9px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: added ? "default" : "pointer", textAlign: "left", opacity: loading ? 0.6 : 1 }}>
-                              <div>
-                                <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{l.name}</div>
-                                <div style={{ fontSize: 9, color: C.muted, fontFamily: "monospace" }}>{l.totalTeams} teams · {l.season} · {l.scoring}</div>
-                              </div>
-                              <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
-                                <span style={{ fontSize: 9, fontFamily: "monospace", color: tc, background: tc + "20", borderRadius: 3, padding: "1px 5px" }}>{l.type}</span>
-                                <span style={{ fontSize: 11, color: added ? C.accent : C.muted }}>{added ? "✓" : "+"}</span>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-                {tab === "id" && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <input value={username} onChange={e => setUsername(e.target.value)}
-                      placeholder="Your Sleeper username (for team identification)"
-                      style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 7, padding: "7px 12px", color: C.text, fontSize: 12, outline: "none" }} />
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <input value={leagueId} onChange={e => setLeagueId(e.target.value)} onKeyDown={e => e.key === "Enter" && connectSleeperById()}
-                        placeholder="Sleeper League ID from URL" style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 7, padding: "7px 12px", color: C.text, fontSize: 12, outline: "none" }} />
-                      <button onClick={connectSleeperById} disabled={loading}
-                        style={{ background: "#22C55E20", border: "1px solid #22C55E50", borderRadius: 7, padding: "7px 14px", fontSize: 12, color: C.accent, cursor: "pointer", fontWeight: 700, opacity: loading ? 0.6 : 1 }}>
-                        {loading ? "…" : "Connect"}
-                      </button>
-                    </div>
-                    <div style={{ fontSize: 10, color: C.muted }}>
-                      League ID: <span style={{ fontFamily: "monospace", color: C.text }}>sleeper.com/leagues/<span style={{ color: C.accent }}>LEAGUE_ID</span></span>
-                      {" · "}Username needed to identify your team correctly.
-                    </div>
-                  </div>
-                )}
+                <div style={{ fontSize: 10, color: C.muted }}>
+                  League ID: <span style={{ fontFamily: "monospace", color: C.text }}>sleeper.com/leagues/<span style={{ color: C.accent }}>LEAGUE_ID</span></span>
+                </div>
               </div>
             )}
 
-            {/* ── ESPN ── */}
             {platform === PLATFORMS.ESPN && (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ background: "#EF444410", border: "1px solid #EF444430", borderRadius: 8, padding: "10px 12px" }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: "#EF4444", marginBottom: 4 }}>ESPN Private League Auth</div>
                   <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.6 }}>
-                    Public leagues work without auth. For private leagues, get your <code style={{ color: C.text }}>espn_s2</code> and <code style={{ color: C.text }}>SWID</code> cookies:
-                    <br />Open ESPN Fantasy → F12 DevTools → Application → Cookies → copy both values.
+                    Public leagues work without auth. For private leagues, copy your <code style={{ color: C.text }}>espn_s2</code> and <code style={{ color: C.text }}>SWID</code> cookies from F12 DevTools → Application → Cookies.
                   </div>
                 </div>
                 <input value={espnLeagueId} onChange={e => setEspnLeagueId(e.target.value)} placeholder="ESPN League ID (from URL: /league/123456)" style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 7, padding: "7px 12px", color: C.text, fontSize: 12, outline: "none" }} />
-                <input value={espnS2} onChange={e => setEspnS2(e.target.value)} placeholder="espn_s2 cookie (optional — private leagues)" style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 7, padding: "7px 12px", color: C.text, fontSize: 12, outline: "none" }} />
-                <input value={swid} onChange={e => setSwid(e.target.value)} placeholder="SWID cookie (optional — private leagues)" style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 7, padding: "7px 12px", color: C.text, fontSize: 12, outline: "none" }} />
+                <input value={espnS2} onChange={e => setEspnS2(e.target.value)} placeholder="espn_s2 cookie (optional)" style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 7, padding: "7px 12px", color: C.text, fontSize: 12, outline: "none" }} />
+                <input value={swid} onChange={e => setSwid(e.target.value)} placeholder="SWID cookie (optional)" style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 7, padding: "7px 12px", color: C.text, fontSize: 12, outline: "none" }} />
                 <button onClick={connectESPN} disabled={loading || !espnLeagueId.trim()}
                   style={{ background: "#EF444420", border: "1px solid #EF444450", borderRadius: 7, padding: "8px", fontSize: 12, color: "#EF4444", cursor: "pointer", fontWeight: 700, opacity: loading ? 0.6 : 1 }}>
                   {loading ? "Connecting…" : "Connect ESPN League"}
@@ -311,14 +231,12 @@ export const LeagueManager = () => {
               </div>
             )}
 
-            {/* ── Yahoo ── */}
             {platform === PLATFORMS.YAHOO && (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ background: "#5B21B610", border: "1px solid #5B21B630", borderRadius: 8, padding: "10px 12px" }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: "#7C3AED", marginBottom: 4 }}>Yahoo Fantasy OAuth</div>
                   <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.6 }}>
-                    Yahoo requires OAuth. Click below to authenticate — you&apos;ll be redirected to Yahoo and back.
-                    <br />Requires <code style={{ color: C.text }}>YAHOO_CLIENT_ID</code> in <code style={{ color: C.text }}>.env.local</code> (see <a href="https://developer.yahoo.com/apps/" target="_blank" rel="noreferrer" style={{ color: "#7C3AED" }}>developer.yahoo.com/apps</a>).
+                    Yahoo requires OAuth. Click below to authenticate.
                   </div>
                 </div>
                 <button onClick={startYahooOAuth}

@@ -109,17 +109,35 @@ export const SleeperAdapter = {
   platform: PLATFORMS.SLEEPER,
 
   /**
-   * Look up a user by username and return all their leagues for the season.
-   * Returns: Array<{ platformLeagueId, name, type, totalTeams, season, userId }>
-   */
-  /**
-   * Look up a Sleeper user by username. Returns the raw user object with user_id.
+   * Look up a Sleeper user by username. Throws if the username does not exist.
    */
   async getUserByUsername(username) {
-    return fetchJSON(
+    const user = await fetchJSON(
       `https://api.sleeper.app/v1/user/${username}`,
       3_600_000, `sleeper:user:${username}`
     );
+    if (!user?.user_id) throw new Error(`Sleeper username "${username}" not found.`);
+    return user;
+  },
+
+  /**
+   * Verify that a resolved user_id is an owner of a roster in the given league.
+   * Throws with a user-visible message if not a member.
+   * Warms the roster cache so getLeagueData won't re-fetch from the network.
+   */
+  async verifyMembership(platformLeagueId, userId) {
+    let rosters;
+    try {
+      rosters = await fetchJSON(
+        `https://api.sleeper.app/v1/league/${platformLeagueId}/rosters`,
+        900_000, `sleeper:rosters:${platformLeagueId}`
+      );
+    } catch {
+      throw new Error("League not found — check the ID.");
+    }
+    if (!rosters?.length) throw new Error("League not found — check the ID.");
+    if (!rosters.some(r => String(r.owner_id) === String(userId)))
+      throw new Error("This username is not a member of the specified league.");
   },
 
   async getLeaguesForUser(credentials) {

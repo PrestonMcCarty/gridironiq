@@ -21,7 +21,7 @@ export const TradesPage = () => {
     leagueLoaded, leagueLoading,
     reloadLeague,
     setUserId,
-    addLeague,
+    addSleeperLeague,
   } = usePlayersCtx();
 
   const [modal,       setModal]       = useState(null);
@@ -63,7 +63,7 @@ export const TradesPage = () => {
   const handleLeagueLoaded = (lid, uid, info) => {
     // Delegate to the multi-league store — this persists the league and makes
     // it the active league globally, so all pages see it immediately.
-    addLeague(lid, uid, info);
+    addSleeperLeague(lid, uid, info);
   };
 
   const findP      = id => players.find(p => String(p.id) === String(id) || String(p.sleeperPlayerId) === String(id));
