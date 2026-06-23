@@ -141,6 +141,14 @@ export const PlayerIntelligence = {
       } : null,
       news:            this._buildNews(sp, injStatus),
       aiRecommendation: aiRec,
+      _debug: {
+        projectionSource:    ppgSource,
+        matchupSource:       oppTeam ? "sleeper_opponent_abbr" : "no_opponent_data",
+        historicalWeeksUsed: scores.length,
+        missingOpponent:     !oppTeam,
+        missingProjection:   !projData,
+        missingStats:        scores.length === 0,
+      },
     };
   },
 

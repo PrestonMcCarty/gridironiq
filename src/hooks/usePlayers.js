@@ -137,7 +137,13 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
         const pid = sp.player_id;
 
         const weeklyScores = multiWeekStats
-          .map(ws => { const s = ws[pid]; return s ? SleeperService.calcPPG(s, scoring) : null; })
+          .map(ws => {
+            const s = ws[pid];
+            // Exclude missing stats AND empty stat objects ({} is truthy but means the
+            // game hasn't been played or published yet — don't treat it as a 0-pt week)
+            if (!s || Object.keys(s).length === 0) return null;
+            return SleeperService.calcPPG(s, scoring);
+          })
           .filter(v => v !== null);
         const nextOpp = sp.opponent_abbr || null;
 

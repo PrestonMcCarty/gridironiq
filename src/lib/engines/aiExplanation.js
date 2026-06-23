@@ -54,9 +54,11 @@ export const AIExplanationEngine = {
     else if (p.bustPct >= 20)
       riskFactors.push(`Moderate floor risk — ${p.bustPct}% sub-10 pt games`);
 
-    if (p.matchupGrade === "D")
-      riskFactors.push(`Tough matchup vs ${p.oppTeam || "opp"} (#${p.rawDefRank} def vs ${p.pos})`);
-    else if (p.matchupGrade === "C")
+    // Only flag matchup as a risk when we have confirmed opponent data.
+    // Missing opponent_abbr defaults to grade "C" — never penalise a player for missing data.
+    if (p.oppTeam && p.matchupGrade === "D")
+      riskFactors.push(`Tough matchup vs ${p.oppTeam} (#${p.rawDefRank} def vs ${p.pos})`);
+    else if (p.oppTeam && p.matchupGrade === "C")
       riskFactors.push(`Neutral matchup — no free points this week`);
 
     if (p.last4Avg < p.last8Avg * 0.85 && p.last8Avg > 0)
