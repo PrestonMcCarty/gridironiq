@@ -9,6 +9,7 @@ export const AIRecPanel = ({ rec, compact = false }) => {
   const actionCol =
     action === "START" || action === "LEAN START" ? C.accent
     : action === "SIT" || action === "LEAN SIT" ? C.danger
+    : action === "OFFSEASON" ? C.muted
     : C.warning;
 
   return (

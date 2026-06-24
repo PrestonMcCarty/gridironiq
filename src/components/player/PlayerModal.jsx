@@ -61,8 +61,8 @@ export const PlayerModal = ({ player, onClose }) => {
           {/* AI Recommendation */}
           {p.aiRecommendation && (
             <div>
-              <div style={{ fontSize: 10, fontWeight: 800, color: C.accent, letterSpacing: 1.5, fontFamily: "monospace", marginBottom: 8 }}>
-                ⚡ RECOMMENDATION: {p.aiRecommendation.action} {p.name}
+              <div style={{ fontSize: 10, fontWeight: 800, color: p.aiRecommendation.action === "OFFSEASON" ? C.muted : C.accent, letterSpacing: 1.5, fontFamily: "monospace", marginBottom: 8 }}>
+                {p.aiRecommendation.action === "OFFSEASON" ? `⏸ OFFSEASON — ${p.name}` : `⚡ RECOMMENDATION: ${p.aiRecommendation.action} ${p.name}`}
               </div>
               <AIRecPanel rec={p.aiRecommendation} />
             </div>

@@ -5,6 +5,29 @@ export const AIExplanationEngine = {
     if (p.pos === "K")   return this._generateK(p);
     const staleFlags = p.staleFlags || [];
 
+    // ── Offseason early exit ───────────────────────────────────────────────
+    // No matchup schedule + zero historical stats = offseason data vacuum.
+    // Fabricating a confidence score from baseline-only inputs is misleading.
+    const n0 = v => (typeof v === "number" && isFinite(v)) ? v : 0;
+    const isOffseason = staleFlags.includes("missing_opponent")
+      && n0(p.consistencyScore) === 0
+      && n0(p.opportunityScore) <= 25;
+    if (isOffseason) {
+      const reasons = [
+        `${p.name} is on your roster — offseason analysis based on rankings and value`,
+        p.injuryRiskScore >= 85
+          ? `Healthy heading into the offseason — no injury concerns`
+          : `Monitor injury recovery status before season`,
+      ].filter(Boolean);
+      return {
+        action: "OFFSEASON", confidence: null,
+        reasons,
+        riskFactors: [`No matchup or historical stats available until the season begins`],
+        strengths: reasons.slice(0, 2).map(r => r.split(" — ")[0] || r),
+        _penalties: [], _bonuses: [],
+      };
+    }
+
     // ── Skill player path (QB / RB / WR / TE) ────────────────────────────
     const reasons     = [];
     const riskFactors = [];

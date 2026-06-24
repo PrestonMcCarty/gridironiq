@@ -79,7 +79,7 @@ export const LineupPage = ({ settings }) => {
         <span style={{ fontFamily: "monospace", fontSize: 10, color: C.muted, flexShrink: 0 }}>{p.team}</span>
         <span style={{ fontFamily: "monospace", fontSize: 12, color: C.accent, fontWeight: 700, flexShrink: 0 }}>{p.ppg}</span>
         {p.matchup && <span style={{ fontSize: 10, fontWeight: 800, color: gc, fontFamily: "monospace", flexShrink: 0 }}>{p.matchup.grade}</span>}
-        {rec && <div style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
+        {rec && rec.action !== "OFFSEASON" && <div style={{ display: "flex", alignItems: "center", gap: 3, flexShrink: 0 }}>
           <div style={{ width: 28, height: 3, background: C.border, borderRadius: 2, overflow: "hidden" }}>
             <div style={{ height: "100%", width: `${rec.confidence}%`, background: rec.confidence >= 70 ? C.accent : rec.confidence >= 50 ? C.blue : C.warning, borderRadius: 2 }} />
           </div>
