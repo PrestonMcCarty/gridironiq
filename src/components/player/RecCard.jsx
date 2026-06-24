@@ -53,11 +53,13 @@ export const RecCard = ({ label, rec, color, icon, onDraft, onView, currentPick 
   const tierCol  = TIER_COLORS[tier]    || C.muted;
   const scarCol  = SCARCITY_COLORS[scarcity] || C.muted;
 
-  const valueScore = (currentPick && p.adp && p.adpSource !== "derived")
-    ? Math.round(p.adp - currentPick) : null;
+  // valueScore: ADP minus overallRank — positive means community drafts LATER than rank warrants
+  // (undervalued). Negative means overdrafted relative to rank (reach).
+  const valueScore = (p.adp && p.overallRank && p.adpSource !== "derived")
+    ? Math.round(p.adp - p.overallRank) : null;
   const valueCol = valueScore === null ? C.muted
-    : valueScore >= 5 ? "#22C55E" : valueScore >= 1 ? "#3B82F6"
-    : valueScore >= -4 ? "#F59E0B" : "#EF4444";
+    : valueScore >= 10 ? "#22C55E" : valueScore >= 3 ? "#3B82F6"
+    : valueScore >= -5 ? "#F59E0B" : "#EF4444";
 
   const needGradeCol = rec.needGrade ? (NEED_GRADE_COLORS[rec.needGrade] || C.muted) : null;
 

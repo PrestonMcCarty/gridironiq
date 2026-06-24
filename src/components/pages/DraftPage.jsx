@@ -71,8 +71,11 @@ export const DraftPage = ({ settings }) => {
 
   // ── BEST AVAILABLE ENGINE ──────────────────────────────────────────────────
   // Pure talent/value score — zero roster context. Factors:
-  //   1. Overall rank (primary signal)
-  //   2. ADP value vs current pick (surplus picks available)
+  //   1. Overall rank (primary signal — biggest weight)
+  //   2. ADP vs rank gap: ADP later than rank = undervalued by community (+bonus)
+  //      Uses (p.overallRank - p.adp): positive when rank is WORSE than ADP
+  //      i.e. the community is drafting them LATER than their rank deserves.
+  //      This is directionally consistent with the Sleeper/Value engines.
   //   3. Injury risk (hard penalise OUT/IR)
   //   4. Tier (Elite players get a bonus to push them above mid-tier)
   //   5. Projection (PPG)
@@ -83,7 +86,12 @@ export const DraftPage = ({ settings }) => {
     let best = null, bestScore = -Infinity;
     for (const p of candidates) {
       const rankScore  = p.overallRank ? Math.max(0, 200 - p.overallRank) : 0;
-      const adpValue   = (p.adp && p.adpSource !== "derived") ? Math.max(0, p.adp - pick) * 2 : 0;
+      // adpValue: positive when rank > ADP (undervalued — community drafts later than rank warrants)
+      //           zero or negative when rank <= ADP (fairly or over-valued)
+      // Capped at 60 to prevent a single term from dominating.
+      const adpValue   = (p.adp && p.overallRank && p.adpSource !== "derived")
+        ? Math.min(60, Math.max(0, p.overallRank - p.adp) * 1.5)
+        : 0;
       const injPenalty = p.injury === "Q" ? -15 : 0;
       const tier       = getTierLabel(p.pos, p.posRank);
       const tierBonus  = TIER_BONUS[tier] || 0;
@@ -94,11 +102,13 @@ export const DraftPage = ({ settings }) => {
     if (!best) return null;
 
     const p   = best.player;
-    const adpSurplus = (p.adp && p.adpSource !== "derived") ? Math.round(p.adp - pick) : null;
+    // adpSurplus: positive when ADP is later than rank (undervalued by community)
+    const adpSurplus = (p.adp && p.overallRank && p.adpSource !== "derived")
+      ? Math.round(p.adp - p.overallRank) : null;
     const tier = getTierLabel(p.pos, p.posRank);
     const reason =
       tier === "Elite" ? `${p.pos} elite tier — hardest to replace if passed on` :
-      adpSurplus > 5   ? `${adpSurplus} picks of surplus value over ADP — strong value window` :
+      adpSurplus > 5   ? `ADP ${Math.round(p.adp)} vs rank #${p.overallRank} — community underrating by ${adpSurplus} picks` :
       p.overallRank <= 12 ? `Top-${p.overallRank} overall — franchise talent` :
       `Highest remaining value at pick ${pick}`;
 
@@ -228,7 +238,7 @@ export const DraftPage = ({ settings }) => {
     const candidates = available.filter(p =>
       p.overallRank &&
       p.adp &&
-      p.adpSource === "fantasycalc" &&
+      p.adpSource === "fantasycalc_rank" &&
       !["OUT","IR"].includes(p.injury) &&
       (p.adp - p.overallRank) >= MIN_VALUE
     );
@@ -307,7 +317,7 @@ export const DraftPage = ({ settings }) => {
 
     // Top players by ADP who are still available — most likely to be drafted soon
     const topByAdp = [...available]
-      .filter(p => p.adp && p.adpSource === "fantasycalc" && p.overallRank)
+      .filter(p => p.adp && p.adpSource === "fantasycalc_rank" && p.overallRank)
       .sort((a, b) => (a.adp ?? 999) - (b.adp ?? 999))
       .slice(0, 12);
 

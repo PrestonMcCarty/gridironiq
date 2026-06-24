@@ -76,8 +76,10 @@ export function generateDraftExplanation(player, context = {}) {
     !["OUT","IR"].includes(a.injury)
   ).sort((a, b) => (a.adp ?? 999) - (b.adp ?? 999));
 
-  // ADP value
-  const adpValue  = (p.adp && p.adpSource === "fantasycalc_rank") ? Math.round(p.adp - pick) : null;
+  // adpValue: ADP minus rank — positive = community drafts LATER than rank warrants (undervalued).
+  // This is the same direction as the Sleeper Pick and Value Pick engines.
+  const adpValue  = (p.adp && p.overallRank && p.adpSource === "fantasycalc_rank")
+    ? Math.round(p.adp - p.overallRank) : null;
   const havePos   = myPosCounts[p.pos] || 0;
   const needPos   = Math.max(0, (settings.slots[p.pos] || 0) + (["RB","WR","TE"].includes(p.pos) ? (settings.slots.FLEX || 0) * 0.4 : 0) - havePos);
   const rounds    = settings.slots ? Object.values(settings.slots).reduce((a, b) => a + b, 0) : 16;
