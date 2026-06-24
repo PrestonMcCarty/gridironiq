@@ -9,9 +9,36 @@ export const AIExplanationEngine = {
     // No matchup schedule + zero historical stats = offseason data vacuum.
     // Fabricating a confidence score from baseline-only inputs is misleading.
     const n0 = v => (typeof v === "number" && isFinite(v)) ? v : 0;
-    const isOffseason = staleFlags.includes("missing_opponent")
-      && n0(p.consistencyScore) === 0
-      && n0(p.opportunityScore) <= 25;
+    const cond_missingOpp    = staleFlags.includes("missing_opponent");
+    const cond_consistency0  = n0(p.consistencyScore) === 0;
+    const cond_opportunity25 = n0(p.opportunityScore) <= 25;
+    const isOffseason = cond_missingOpp && cond_consistency0 && cond_opportunity25;
+
+    // ── TEMP runtime diagnostics — surfaced in PlayerModal debug panel ─────
+    // Captures every value used in the offseason decision so it can be read
+    // in the UI without browser console access. Remove once verified.
+    const _diag = {
+      // condition components (each leg of isOffseason)
+      cond_missingOpp,
+      cond_consistency0,
+      cond_opportunity25,
+      isOffseason,
+      // raw runtime inputs
+      staleFlags,
+      scoresLength:      p.scores?.length ?? null,   // null = "scores" key not passed
+      consistencyScore:  p.consistencyScore,
+      opportunityScore:  p.opportunityScore,         // undefined here if key mismatch (real key = oppScore)
+      oppScore:          p.oppScore,                 // the value playerIntelligence actually computed
+      matchupGrade:      p.matchupGrade,
+      oppTeam:           p.oppTeam ?? null,
+      injuryStatus:      p.injStatus ?? null,
+      injuryRiskScore:   p.injuryRiskScore,
+      seasonUsed:        p.currentSeason ?? null,
+      currentWeek:       p.currentWeek ?? null,
+      seasonAvg:         p.seasonAvg,
+      ppg:               p.ppg,
+    };
+
     if (isOffseason) {
       const reasons = [
         `${p.name} is on your roster — offseason analysis based on rankings and value`,
@@ -25,6 +52,7 @@ export const AIExplanationEngine = {
         riskFactors: [`No matchup or historical stats available until the season begins`],
         strengths: reasons.slice(0, 2).map(r => r.split(" — ")[0] || r),
         _penalties: [], _bonuses: [],
+        _diag: { ..._diag, recommendationSource: "OFFSEASON_BRANCH" },
       };
     }
 
@@ -120,6 +148,7 @@ export const AIExplanationEngine = {
       riskFactors: riskFactors.slice(0, 3),
       strengths:   reasons.slice(0, 3).map(r => r.split(" — ")[0] || r),
       _penalties, _bonuses,
+      _diag: { ..._diag, recommendationSource: "SKILL_VERDICT", action, confidence },
     };
   },
 

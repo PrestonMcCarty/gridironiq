@@ -20,6 +20,10 @@ export const PlayerModal = ({ player, onClose }) => {
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "#000000d0", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: C.surface, borderRadius: 16, border: `1px solid ${C.border}`, width: "100%", maxWidth: 620, maxHeight: "92vh", overflowY: "auto" }}>
+        {/* ── TEMP BUILD MARKER — proves the edited PlayerModal.jsx is rendering ── */}
+        <div style={{ background: "#FF00AA", color: "#FFFFFF", fontFamily: "monospace", fontSize: 12, fontWeight: 900, letterSpacing: 1, textAlign: "center", padding: "6px 0" }}>
+          BUILD: SITSTART_DEBUG_V1
+        </div>
         {/* Header */}
         <div style={{ padding: "18px 20px", borderBottom: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
@@ -58,6 +62,15 @@ export const PlayerModal = ({ player, onClose }) => {
         </div>
 
         <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
+          {/* ── TEMP DEBUG PANEL — runtime recommendation diagnostics ── */}
+          {p.aiRecommendation?._diag && (
+            <DebugPanel
+              rec={p.aiRecommendation}
+              diag={p.aiRecommendation._diag}
+              debug={p._debug}
+            />
+          )}
+
           {/* AI Recommendation */}
           {p.aiRecommendation && (
             <div>
@@ -179,6 +192,77 @@ export const PlayerModal = ({ player, onClose }) => {
           </div>
         </div>
       </div>
+    </div>
+  );
+};
+
+// ── TEMP DEBUG PANEL — runtime recommendation diagnostics ──────────────────
+// Renders the exact values aiExplanation.js used to make its decision, so the
+// offseason condition can be inspected directly in the UI. Remove once verified.
+const DebugPanel = ({ rec, diag, debug }) => {
+  const yesNo = (b) => (b ? { t: "TRUE", c: "#22C55E" } : { t: "FALSE", c: "#EF4444" });
+  const Row = ({ k, v, col }) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "3px 0", borderBottom: "1px solid #ffffff10" }}>
+      <span style={{ fontSize: 10, color: "#94A3B8", fontFamily: "monospace" }}>{k}</span>
+      <span style={{ fontSize: 10, color: col || "#E2E8F0", fontFamily: "monospace", fontWeight: 700, textAlign: "right", wordBreak: "break-word" }}>{v}</span>
+    </div>
+  );
+
+  const c1 = yesNo(diag.cond_missingOpp);
+  const c2 = yesNo(diag.cond_consistency0);
+  const c3 = yesNo(diag.cond_opportunity25);
+  const offs = yesNo(diag.isOffseason);
+
+  // Identify the failing leg (first condition that is false)
+  const failing = !diag.cond_missingOpp ? "cond_missingOpp (no 'missing_opponent' in staleFlags)"
+    : !diag.cond_consistency0 ? `cond_consistency0 (consistencyScore=${diag.consistencyScore} ≠ 0)`
+    : !diag.cond_opportunity25 ? `cond_opportunity25 (opportunityScore=${diag.opportunityScore} > 25)`
+    : "none — all conditions TRUE";
+
+  return (
+    <div style={{ background: "#1A1206", borderRadius: 10, border: "1px solid #F59E0B60", padding: 14 }}>
+      <div style={{ fontSize: 10, fontWeight: 800, color: "#F59E0B", letterSpacing: 1.5, fontFamily: "monospace", marginBottom: 10 }}>
+        🐞 RUNTIME DEBUG — RECOMMENDATION ENGINE
+      </div>
+
+      <Row k="recommendationSource" v={diag.recommendationSource} col={diag.recommendationSource === "OFFSEASON_BRANCH" ? "#22C55E" : "#F59E0B"} />
+      <Row k="action" v={String(rec.action)} col="#E2E8F0" />
+      <Row k="confidence" v={rec.confidence == null ? "null" : `${rec.confidence}%`} col="#E2E8F0" />
+
+      <div style={{ height: 8 }} />
+      <div style={{ fontSize: 9, color: "#F59E0B", fontFamily: "monospace", marginBottom: 4 }}>OFFSEASON CONDITION (all 3 must be TRUE):</div>
+      <Row k="① missing_opponent ∈ staleFlags" v={c1.t} col={c1.c} />
+      <Row k="② consistencyScore === 0" v={c2.t} col={c2.c} />
+      <Row k="③ opportunityScore <= 25" v={c3.t} col={c3.c} />
+      <Row k="⇒ isOffseason" v={offs.t} col={offs.c} />
+      <Row k="⇒ FAILING LEG" v={failing} col={diag.isOffseason ? "#22C55E" : "#EF4444"} />
+
+      <div style={{ height: 8 }} />
+      <div style={{ fontSize: 9, color: "#F59E0B", fontFamily: "monospace", marginBottom: 4 }}>RAW RUNTIME VALUES:</div>
+      <Row k="staleFlags" v={JSON.stringify(diag.staleFlags)} />
+      <Row k="scoresLength" v={String(diag.scoresLength)} />
+      <Row k="consistencyScore" v={String(diag.consistencyScore)} />
+      <Row k="opportunityScore (key on p)" v={String(diag.opportunityScore)} col={diag.opportunityScore === undefined ? "#EF4444" : "#E2E8F0"} />
+      <Row k="oppScore (real computed key)" v={String(diag.oppScore)} />
+      <Row k="matchupGrade" v={String(diag.matchupGrade)} />
+      <Row k="oppTeam" v={String(diag.oppTeam)} />
+      <Row k="injuryStatus" v={String(diag.injuryStatus)} />
+      <Row k="injuryRiskScore" v={String(diag.injuryRiskScore)} />
+      <Row k="seasonUsed" v={String(diag.seasonUsed)} />
+      <Row k="currentWeek" v={String(diag.currentWeek)} />
+      <Row k="seasonAvg" v={String(diag.seasonAvg)} />
+      <Row k="ppg" v={String(diag.ppg)} />
+
+      {debug && (
+        <>
+          <div style={{ height: 8 }} />
+          <div style={{ fontSize: 9, color: "#F59E0B", fontFamily: "monospace", marginBottom: 4 }}>_debug CROSS-CHECK:</div>
+          <Row k="historicalWeeksUsed" v={String(debug.historicalWeeksUsed)} />
+          <Row k="missingOpponent" v={String(debug.missingOpponent)} />
+          <Row k="missingStats" v={String(debug.missingStats)} />
+          <Row k="matchupSource" v={String(debug.matchupSource)} />
+        </>
+      )}
     </div>
   );
 };
