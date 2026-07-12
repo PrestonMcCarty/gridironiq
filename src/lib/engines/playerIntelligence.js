@@ -1,6 +1,6 @@
 import { SleeperService } from "@/lib/services/sleeper";
 import { AIExplanationEngine } from "@/lib/engines/aiExplanation";
-import { CURRENT_SEASON, CURRENT_WEEK, defRankToGrade, defRankToLabel } from "@/lib/constants";
+import { CURRENT_SEASON, defRankToGrade, defRankToLabel } from "@/lib/constants";
 
 export const PlayerIntelligence = {
   compute(sleeperPlayer, weeklyScores = [], projData = null, fcValue = null, defRanksByPos = {}, scoring = "PPR", nextOpp = null, positionalRank = null, byeWeekMap = {}, fetchedAt = {}, seasonStarted = true) {
@@ -137,8 +137,7 @@ export const PlayerIntelligence = {
       trendDir, trendPct, oppScore, consistencyScore,
       boomPct, bustPct, sosScore, playoffSosScore, bye: byeWeekMap[sp.team] || sp.bye_week || null, injuryRiskScore,
       matchupGrade, rawDefRank, oppTeam, adp: resolvedAdp, fcVal, injStatus, scores,
-      staleFlags,
-      currentSeason: CURRENT_SEASON, currentWeek: CURRENT_WEEK, seasonStarted,
+      staleFlags, seasonStarted,
     });
 
     // Badge values — each maps to a distinct colour in InjuryBadge:

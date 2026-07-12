@@ -7,39 +7,11 @@ export const AIExplanationEngine = {
 
     // ── Offseason early exit ───────────────────────────────────────────────
     // The true offseason signal is "no games played yet this season" — passed
-    // down globally as seasonStarted. We no longer key on missing_opponent,
-    // because the ESPN schedule feed now supplies next-season opponents during
-    // the offseason (so that flag is no longer a reliable offseason indicator).
+    // down globally as seasonStarted. We do NOT key on missing_opponent,
+    // because the ESPN schedule feed supplies next-season opponents during the
+    // offseason (so that flag is no longer a reliable offseason indicator).
     // Fabricating a confidence score from baseline-only inputs is misleading.
-    const n0 = v => (typeof v === "number" && isFinite(v)) ? v : 0;
-    const cond_seasonNotStarted = p.seasonStarted === false;
-    const cond_noScores         = (p.scores?.length ?? 0) === 0;
-    const isOffseason = cond_seasonNotStarted && cond_noScores;
-
-    // ── TEMP runtime diagnostics — surfaced in PlayerModal debug panel ─────
-    // Captures every value used in the offseason decision so it can be read
-    // in the UI without browser console access. Remove once verified.
-    const _diag = {
-      // condition components (both legs of isOffseason)
-      cond_seasonNotStarted,
-      cond_noScores,
-      isOffseason,
-      // raw runtime inputs
-      seasonStarted:     p.seasonStarted,
-      staleFlags,
-      scoresLength:      p.scores?.length ?? null,   // null = "scores" key not passed
-      consistencyScore:  p.consistencyScore,
-      opportunityScore:  p.opportunityScore,         // undefined here if key mismatch (real key = oppScore)
-      oppScore:          p.oppScore,                 // the value playerIntelligence actually computed
-      matchupGrade:      p.matchupGrade,
-      oppTeam:           p.oppTeam ?? null,
-      injuryStatus:      p.injStatus ?? null,
-      injuryRiskScore:   p.injuryRiskScore,
-      seasonUsed:        p.currentSeason ?? null,
-      currentWeek:       p.currentWeek ?? null,
-      seasonAvg:         p.seasonAvg,
-      ppg:               p.ppg,
-    };
+    const isOffseason = p.seasonStarted === false && (p.scores?.length ?? 0) === 0;
 
     if (isOffseason) {
       const reasons = [
@@ -54,7 +26,6 @@ export const AIExplanationEngine = {
         riskFactors: [`No matchup or historical stats available until the season begins`],
         strengths: reasons.slice(0, 2).map(r => r.split(" — ")[0] || r),
         _penalties: [], _bonuses: [],
-        _diag: { ..._diag, recommendationSource: "OFFSEASON_BRANCH" },
       };
     }
 
@@ -150,7 +121,6 @@ export const AIExplanationEngine = {
       riskFactors: riskFactors.slice(0, 3),
       strengths:   reasons.slice(0, 3).map(r => r.split(" — ")[0] || r),
       _penalties, _bonuses,
-      _diag: { ..._diag, recommendationSource: "SKILL_VERDICT", action, confidence },
     };
   },
 
