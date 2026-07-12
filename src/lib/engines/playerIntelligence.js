@@ -3,7 +3,7 @@ import { AIExplanationEngine } from "@/lib/engines/aiExplanation";
 import { CURRENT_SEASON, CURRENT_WEEK, defRankToGrade, defRankToLabel } from "@/lib/constants";
 
 export const PlayerIntelligence = {
-  compute(sleeperPlayer, weeklyScores = [], projData = null, fcValue = null, defRanksByPos = {}, scoring = "PPR", nextOpp = null, positionalRank = null, byeWeekMap = {}, fetchedAt = {}) {
+  compute(sleeperPlayer, weeklyScores = [], projData = null, fcValue = null, defRanksByPos = {}, scoring = "PPR", nextOpp = null, positionalRank = null, byeWeekMap = {}, fetchedAt = {}, seasonStarted = true) {
     const sp  = sleeperPlayer;
     const pos = sp.position || sp.fantasy_positions?.[0] || "?";
 
@@ -138,7 +138,7 @@ export const PlayerIntelligence = {
       boomPct, bustPct, sosScore, playoffSosScore, bye: byeWeekMap[sp.team] || sp.bye_week || null, injuryRiskScore,
       matchupGrade, rawDefRank, oppTeam, adp: resolvedAdp, fcVal, injStatus, scores,
       staleFlags,
-      currentSeason: CURRENT_SEASON, currentWeek: CURRENT_WEEK,
+      currentSeason: CURRENT_SEASON, currentWeek: CURRENT_WEEK, seasonStarted,
     });
 
     // Badge values — each maps to a distinct colour in InjuryBadge:

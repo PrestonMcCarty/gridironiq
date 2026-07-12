@@ -11,10 +11,12 @@
  *   trending    15 min — waiver-wire add/drop data
  *   stats       24 hr  — historical weekly stats (rarely change after publication)
  *   fantasyCalc 60 min — ADP + trade values
+ *   schedule    15 min — ESPN weekly opponent map (fills Sleeper's null opponent)
  */
 
 import { SleeperService }     from "@/lib/services/sleeper";
 import { FantasyCalcService } from "@/lib/services/fantasycalc";
+import { ESPNService }        from "@/lib/services/espn";
 import { cache }              from "@/lib/cache";
 import { CURRENT_SEASON, CURRENT_WEEK } from "@/lib/constants";
 
@@ -25,6 +27,7 @@ const TTL = {
   trending:    15 * 60_000,   // 15 min
   stats:       24 * 60 * 60_000, // 24 hr
   fantasyCalc: 60 * 60_000,   //  1 hr
+  schedule:    15 * 60_000,   // 15 min — ESPN opponent map
 };
 
 // Cache keys used by SleeperService / FantasyCalcService (must match their fetchJSON calls)
@@ -44,6 +47,7 @@ const _slots = {
   trending:    makeSlot("Trending adds/drops",         TTL.trending),
   stats:       makeSlot("Historical weekly stats",     TTL.stats),
   fantasyCalc: makeSlot("ADP + trade values",          TTL.fantasyCalc),
+  schedule:    makeSlot("Weekly schedule + opponents", TTL.schedule),
 };
 
 const _listeners = new Set();
@@ -86,6 +90,9 @@ async function _fetchSlot(slotName, isSuperflex = false) {
         break;
       case "fantasyCalc":
         data = await FantasyCalcService.getValues(isSuperflex);
+        break;
+      case "schedule":
+        data = await ESPNService.getScheduleMap();
         break;
       default:
         return;
@@ -142,12 +149,14 @@ export const LiveDataService = {
       trending:    _slots.trending.data,
       stats:       _slots.stats.data,
       fantasyCalc: _slots.fantasyCalc.data,
+      schedule:    _slots.schedule.data,
       fetchedAt: {
         players:     _slots.players.fetchedAt,
         projections: _slots.projections.fetchedAt,
         trending:    _slots.trending.fetchedAt,
         stats:       _slots.stats.fetchedAt,
         fantasyCalc: _slots.fantasyCalc.fetchedAt,
+        schedule:    _slots.schedule.fetchedAt,
       },
     };
   },

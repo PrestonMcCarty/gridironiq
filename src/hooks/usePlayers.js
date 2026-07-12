@@ -44,6 +44,10 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
       const trending       = live.trending || [];
       const weekProj       = live.projections || {};
       const multiWeekStats = live.stats || [];
+      const scheduleOpps   = live.schedule?.opponents || {};
+      // Global offseason signal: have any games been played in the fetched weeks?
+      const seasonStarted  = Array.isArray(multiWeekStats)
+        && multiWeekStats.some(ws => ws && Object.keys(ws).length > 0);
 
       sleeperPlayersRef.current = sleeperPlayers;
 
@@ -114,7 +118,9 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
             }).filter(v => v !== null)
           : [];
 
-        const nextOpp = sp.opponent_abbr || null;
+        // Prefer Sleeper's in-season opponent_abbr; fall back to the ESPN
+        // schedule map (fixes the offseason "No opponent data" vacuum).
+        const nextOpp = sp.opponent_abbr || scheduleOpps[sp.team]?.opp || null;
         const fc      = FantasyCalcService.lookup(sp, fcNameMap);
         const proj    = weekProj[pid] || null;
         if (posCounter[sp.position] !== undefined) posCounter[sp.position]++;
@@ -125,6 +131,7 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
           weeklyScores, proj, fc, defRanksByPos, scoring, nextOpp,
           currentPosRank, byeWeekMap,
           live.fetchedAt,  // ← freshness timestamps for _live metadata
+          seasonStarted,   // ← global offseason signal
         );
       });
 
@@ -220,6 +227,9 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
     const weekProj = live.projections || {};
     const trending = live.trending || [];
     const multiWeekStats = live.stats;
+    const scheduleOpps = live.schedule?.opponents || {};
+    const seasonStarted = Array.isArray(multiWeekStats)
+      && multiWeekStats.some(ws => ws && Object.keys(ws).length > 0);
     const trendingIds = new Set(trending.map(t => t.player_id));
     trendingIdsRef.current = trendingIds;
 
@@ -251,9 +261,10 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
           ownership_pct: trendingIds.has(pid) ? (sp.ownership ?? 50) : (sp.ownership ?? 20) },
         weeklyScores, proj, fc,
         defRanksByPosRef.current, scoring,
-        sp.opponent_abbr || null,
+        sp.opponent_abbr || scheduleOpps[sp.team]?.opp || null,
         p.posRank, byeWeekMapRef.current,
         live.fetchedAt,
+        seasonStarted,
       );
 
       // Preserve fields that don't change on live refresh

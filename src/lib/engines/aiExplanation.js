@@ -6,24 +6,26 @@ export const AIExplanationEngine = {
     const staleFlags = p.staleFlags || [];
 
     // ── Offseason early exit ───────────────────────────────────────────────
-    // No matchup schedule + zero historical stats = offseason data vacuum.
+    // The true offseason signal is "no games played yet this season" — passed
+    // down globally as seasonStarted. We no longer key on missing_opponent,
+    // because the ESPN schedule feed now supplies next-season opponents during
+    // the offseason (so that flag is no longer a reliable offseason indicator).
     // Fabricating a confidence score from baseline-only inputs is misleading.
     const n0 = v => (typeof v === "number" && isFinite(v)) ? v : 0;
-    const cond_missingOpp    = staleFlags.includes("missing_opponent");
-    const cond_consistency0  = n0(p.consistencyScore) === 0;
-    const cond_opportunity25 = n0(p.opportunityScore) <= 25;
-    const isOffseason = cond_missingOpp && cond_consistency0 && cond_opportunity25;
+    const cond_seasonNotStarted = p.seasonStarted === false;
+    const cond_noScores         = (p.scores?.length ?? 0) === 0;
+    const isOffseason = cond_seasonNotStarted && cond_noScores;
 
     // ── TEMP runtime diagnostics — surfaced in PlayerModal debug panel ─────
     // Captures every value used in the offseason decision so it can be read
     // in the UI without browser console access. Remove once verified.
     const _diag = {
-      // condition components (each leg of isOffseason)
-      cond_missingOpp,
-      cond_consistency0,
-      cond_opportunity25,
+      // condition components (both legs of isOffseason)
+      cond_seasonNotStarted,
+      cond_noScores,
       isOffseason,
       // raw runtime inputs
+      seasonStarted:     p.seasonStarted,
       staleFlags,
       scoresLength:      p.scores?.length ?? null,   // null = "scores" key not passed
       consistencyScore:  p.consistencyScore,

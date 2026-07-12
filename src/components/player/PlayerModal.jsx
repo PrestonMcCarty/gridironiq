@@ -208,15 +208,13 @@ const DebugPanel = ({ rec, diag, debug }) => {
     </div>
   );
 
-  const c1 = yesNo(diag.cond_missingOpp);
-  const c2 = yesNo(diag.cond_consistency0);
-  const c3 = yesNo(diag.cond_opportunity25);
+  const c1 = yesNo(diag.cond_seasonNotStarted);
+  const c2 = yesNo(diag.cond_noScores);
   const offs = yesNo(diag.isOffseason);
 
   // Identify the failing leg (first condition that is false)
-  const failing = !diag.cond_missingOpp ? "cond_missingOpp (no 'missing_opponent' in staleFlags)"
-    : !diag.cond_consistency0 ? `cond_consistency0 (consistencyScore=${diag.consistencyScore} ≠ 0)`
-    : !diag.cond_opportunity25 ? `cond_opportunity25 (opportunityScore=${diag.opportunityScore} > 25)`
+  const failing = !diag.cond_seasonNotStarted ? `cond_seasonNotStarted (seasonStarted=${diag.seasonStarted} — games already played)`
+    : !diag.cond_noScores ? `cond_noScores (scoresLength=${diag.scoresLength} > 0)`
     : "none — all conditions TRUE";
 
   return (
@@ -230,10 +228,9 @@ const DebugPanel = ({ rec, diag, debug }) => {
       <Row k="confidence" v={rec.confidence == null ? "null" : `${rec.confidence}%`} col="#E2E8F0" />
 
       <div style={{ height: 8 }} />
-      <div style={{ fontSize: 9, color: "#F59E0B", fontFamily: "monospace", marginBottom: 4 }}>OFFSEASON CONDITION (all 3 must be TRUE):</div>
-      <Row k="① missing_opponent ∈ staleFlags" v={c1.t} col={c1.c} />
-      <Row k="② consistencyScore === 0" v={c2.t} col={c2.c} />
-      <Row k="③ opportunityScore <= 25" v={c3.t} col={c3.c} />
+      <div style={{ fontSize: 9, color: "#F59E0B", fontFamily: "monospace", marginBottom: 4 }}>OFFSEASON CONDITION (both must be TRUE):</div>
+      <Row k="① seasonStarted === false" v={c1.t} col={c1.c} />
+      <Row k="② scoresLength === 0" v={c2.t} col={c2.c} />
       <Row k="⇒ isOffseason" v={offs.t} col={offs.c} />
       <Row k="⇒ FAILING LEG" v={failing} col={diag.isOffseason ? "#22C55E" : "#EF4444"} />
 
