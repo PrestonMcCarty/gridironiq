@@ -38,6 +38,29 @@ export const ESPNService = {
     return ESPNService._parse(data);
   },
 
+  /**
+   * Fetches the schedule for a specific season/week and returns a flat
+   * team → opponent map (Sleeper abbreviations). Used to attribute each
+   * player's weekly performance to the defense (or, for DST, the offense)
+   * they actually faced, so defensive-vulnerability rankings are correct.
+   *
+   * Historical weeks are static, so they're cached aggressively (6 h).
+   *
+   * @param {number} season
+   * @param {number} week
+   * @param {number} seasonType 1=pre, 2=regular (default), 3=post
+   * @returns {Promise<Record<string,string>>} { TEAM: OPP_TEAM }
+   */
+  async getWeekOpponentMap(season, week, seasonType = 2) {
+    const url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard`
+      + `?dates=${season}&seasontype=${seasonType}&week=${week}`;
+    const data = await fetchJSON(url, 6 * 60 * 60_000, `espn:sched:${season}:${seasonType}:${week}`);
+    const { opponents } = ESPNService._parse(data);
+    const map = {};
+    for (const [team, info] of Object.entries(opponents)) map[team] = info.opp;
+    return map;
+  },
+
   _parse(data) {
     const opponents = {};
     const events = Array.isArray(data?.events) ? data.events : [];

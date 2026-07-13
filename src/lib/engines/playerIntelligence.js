@@ -598,91 +598,59 @@ export const PlayerIntelligence = {
   },
 };
 
-export function computeDefensiveRankings(weeklyStatsArray, sleeperPlayers) {
+/**
+ * Rank each NFL defense by how many fantasy points it ALLOWS to each position.
+ *
+ * Correct model: every scorer's fantasy points for a week are attributed to the
+ * team they FACED that week (their opponent's defense), bucketed by the scorer's
+ * position. For DST scorers the same attribution means "points a given offense
+ * gave up to opposing DSTs" — a lower-scoring/turnover-prone offense = easier
+ * DST matchup — so the DST bucket works with the identical logic.
+ *
+ * Ranking is ASCENDING: rank 1 = allows the FEWEST points = toughest matchup.
+ * This aligns with defRankToGrade (rank ≥25 → "A" = easy, rank ≤8 → "D" = tough).
+ *
+ * @param {Array<Object>} weeklyStatsArray  Sleeper weekly stat maps, oldest→newest
+ * @param {Object} sleeperPlayers           pid → player (for team + position)
+ * @param {Array<Record<string,string>>} weekOpponentMaps  per-week team→opponent,
+ *        index-aligned with weeklyStatsArray (from ESPNService.getWeekOpponentMap)
+ */
+export function computeDefensiveRankings(weeklyStatsArray, sleeperPlayers, weekOpponentMaps = []) {
   const NFL_TEAMS = [
     "ARI","ATL","BAL","BUF","CAR","CHI","CIN","CLE","DAL","DEN",
     "DET","GB","HOU","IND","JAX","KC","LAC","LAR","LV","MIA",
     "MIN","NE","NO","NYG","NYJ","PHI","PIT","SEA","SF","TB","TEN","WAS",
   ];
+  const POSITIONS = ["QB","RB","WR","TE","K","DST"];
 
-  // Build team → player_id map for every position so we can sum pts allowed
-  const teamPlayers = {}; // { team: { QB: [pid,...], RB: [...], ... } }
-  Object.entries(sleeperPlayers).forEach(([pid, sp]) => {
-    const team = sp.team;
-    const pos  = sp.position === "DEF" ? "DST" : sp.position;
-    if (!team || !["QB","RB","WR","TE","K","DST"].includes(pos)) return;
-    if (!teamPlayers[team]) teamPlayers[team] = {};
-    if (!teamPlayers[team][pos]) teamPlayers[team][pos] = [];
-    teamPlayers[team][pos].push(pid);
-  });
+  // allowed[team][pos] = fantasy points that team's opponents scored AT pos
+  //                      against team (i.e. points team's defense allowed).
+  const allowed = {};
+  NFL_TEAMS.forEach(t => { allowed[t] = { QB: 0, RB: 0, WR: 0, TE: 0, K: 0, DST: 0 }; });
 
-  // Accumulate fantasy points scored BY each team's players AT EACH POSITION
-  // (= points ALLOWED by the opponent defense for that position group)
-  const ptsScored = {}; // { team: { QB: total, RB: total, ... } }
-  NFL_TEAMS.forEach(t => {
-    ptsScored[t] = { QB: 0, RB: 0, WR: 0, TE: 0, K: 0, DST: 0 };
-  });
-
-  weeklyStatsArray.forEach(weekStats => {
+  weeklyStatsArray.forEach((weekStats, i) => {
     if (!weekStats) return;
+    const oppMap = weekOpponentMaps[i] || {};
     Object.entries(weekStats).forEach(([pid, stats]) => {
-      const sp   = sleeperPlayers[pid];
-      const team = sp?.team;
-      const pos  = sp?.position === "DEF" ? "DST" : sp?.position;
-      if (!team || !ptsScored[team] || !["QB","RB","WR","TE","K","DST"].includes(pos)) return;
-      // Kicker: sum FG/XP pts
-      if (pos === "K") {
-        const kPts =
-          (stats.xpm       || 0) * 1 +
-          (stats.fgm_0_19  || 0) * 3 +
-          (stats.fgm_20_29 || 0) * 3 +
-          (stats.fgm_30_39 || 0) * 3 +
-          (stats.fgm_40_49 || 0) * 4 +
-          (stats.fgm_50p   || 0) * 5 +
-          ((!stats.fgm_0_19 && !stats.fgm_20_29) ? (stats.fgm || 0) * 3 : 0);
-        ptsScored[team].K += kPts;
-        return;
-      }
-      // DST: pts allowed (inverted — higher pts allowed = worse defense = easier matchup)
-      if (pos === "DST") {
-        const ptsAllowed = stats.pts_allow ?? stats.pts_allowed ?? 0;
-        // Convert pts_allowed back to fantasy pts to keep units consistent
-        const dstFantasyPts =
-          (ptsAllowed === 0 ? 10 : ptsAllowed <= 6 ? 7 : ptsAllowed <= 13 ? 4
-            : ptsAllowed <= 20 ? 1 : ptsAllowed <= 27 ? 0 : ptsAllowed <= 34 ? -1 : -4) +
-          (stats.sack      || 0) * 1 +
-          (stats.int       || 0) * 2 +
-          (stats.fum_rec   || 0) * 2 +
-          (stats.safe      || 0) * 2 +
-          (stats.blk_kick  || 0) * 2 +
-          (stats.def_td    || 0) * 6 +
-          (stats.def_st_td || 0) * 6;
-        // Store as NEGATIVE so that a lower (worse) DST score = higher rank number = easier to score against
-        ptsScored[team].DST += -dstFantasyPts; // negative: worse DST = higher value = easier opp
-        return;
-      }
-      // Skill players: standard PPR
-      const skillPts =
-        (stats.pass_yd  || 0) * 0.04 +
-        (stats.pass_td  || 0) * 4 +
-        (stats.pass_int || 0) * -2 +
-        (stats.rush_yd  || 0) * 0.1 +
-        (stats.rush_td  || 0) * 6 +
-        (stats.rec_yd   || 0) * 0.1 +
-        (stats.rec_td   || 0) * 6 +
-        (stats.rec      || 0) * 1 +
-        (stats.fum_lost || 0) * -2;
-      ptsScored[team][pos] = (ptsScored[team][pos] || 0) + skillPts;
+      const sp  = sleeperPlayers[pid];
+      const pos = sp?.position === "DEF" ? "DST" : sp?.position;
+      const scorerTeam = sp?.team;
+      if (!scorerTeam || !POSITIONS.includes(pos)) return;
+
+      const defense = oppMap[scorerTeam];      // team the scorer faced this week
+      if (!defense || !allowed[defense]) return; // bye week / schedule not available
+
+      // Sleeper pre-computes fantasy points; use PPR as the ranking standard.
+      const fp = typeof stats.pts_ppr === "number" ? stats.pts_ppr
+               : typeof stats.pts_std === "number" ? stats.pts_std : 0;
+      allowed[defense][pos] += fp;
     });
   });
 
-  // Rank teams by pts scored (desc) = pts allowed BY opponent defense.
-  // Rank 1 = most pts allowed = easiest matchup.
+  // Rank ascending: rank 1 = allows fewest = toughest defense at that position.
   const ranks = {};
-  ["QB","RB","WR","TE","K","DST"].forEach(pos => {
-    const sorted = [...NFL_TEAMS].sort((a, b) =>
-      (ptsScored[b]?.[pos] ?? 0) - (ptsScored[a]?.[pos] ?? 0)
-    );
+  POSITIONS.forEach(pos => {
+    const sorted = [...NFL_TEAMS].sort((a, b) => (allowed[a][pos] ?? 0) - (allowed[b][pos] ?? 0));
     ranks[pos] = {};
     sorted.forEach((team, idx) => { ranks[pos][team] = idx + 1; });
   });

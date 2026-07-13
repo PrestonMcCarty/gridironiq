@@ -2,7 +2,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { SleeperService }        from "@/lib/services/sleeper";
 import { FantasyCalcService }    from "@/lib/services/fantasycalc";
-import { LiveDataService }       from "@/lib/services/liveDataService";
+import { LiveDataService, getStatWeeks } from "@/lib/services/liveDataService";
+import { ESPNService }            from "@/lib/services/espn";
 import { PlayerIntelligence, computeDefensiveRankings } from "@/lib/engines/playerIntelligence";
 import { initNflState, CURRENT_SEASON, CURRENT_WEEK } from "@/lib/constants";
 import { NFLScheduleService }    from "@/lib/data/nflSchedule";
@@ -58,9 +59,16 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
       const trendingIds = new Set(trending.map(t => t.player_id));
       trendingIdsRef.current = trendingIds;
 
+      // Per-week schedules (index-aligned with the stat weeks) so each
+      // performance is attributed to the defense the player actually faced.
+      const statWeeks = getStatWeeks();
+      const weekOpponentMaps = await Promise.all(
+        statWeeks.map(w => ESPNService.getWeekOpponentMap(CURRENT_SEASON, w).catch(() => ({})))
+      );
       const defRanksByPos = computeDefensiveRankings(
         Array.isArray(multiWeekStats) ? multiWeekStats : [],
         sleeperPlayers,
+        weekOpponentMaps,
       );
       defRanksByPosRef.current = defRanksByPos;
 

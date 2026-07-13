@@ -41,6 +41,15 @@ function makeSlot(label, ttlMs) {
   return { data: null, fetchedAt: null, ttlMs, label, isLoading: false, error: null };
 }
 
+/**
+ * The 8 completed weeks the stats slot fetches, oldest → newest.
+ * Exported so consumers can fetch the matching per-week schedule and keep
+ * the two arrays index-aligned (used for defense-allowed matchup rankings).
+ */
+export function getStatWeeks() {
+  return Array.from({ length: 8 }, (_, i) => Math.max(1, CURRENT_WEEK - 7 + i));
+}
+
 const _slots = {
   players:     makeSlot("Player roster + injuries",   TTL.players),
   projections: makeSlot("Weekly projections",          TTL.projections),
@@ -82,10 +91,9 @@ async function _fetchSlot(slotName, isSuperflex = false) {
         data = await SleeperService.getTrending("add");
         break;
       case "stats":
-        // Fetch last 8 weeks — re-use whichever are already cache-warm
+        // Fetch the completed weeks (see getStatWeeks) — re-use cache-warm ones
         data = await Promise.all(
-          Array.from({ length: 8 }, (_, i) => Math.max(1, CURRENT_WEEK - 7 + i))
-            .map(w => SleeperService.getStats(CURRENT_SEASON, w))
+          getStatWeeks().map(w => SleeperService.getStats(CURRENT_SEASON, w))
         );
         break;
       case "fantasyCalc":
