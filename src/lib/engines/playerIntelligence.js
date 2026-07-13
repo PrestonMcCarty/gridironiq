@@ -41,12 +41,32 @@ export const PlayerIntelligence = {
       : injStatus === "Doubtful"                          ? -15
       : -20;
 
-    const oppScore = Math.min(100, Math.round(
+    // ── Opportunity score ──────────────────────────────────────────────────
+    // Prefer REAL usage (NFLverse wopr / snap% / target share) over the old
+    // production proxy. seasonAvg measures OUTPUT (efficiency × opportunity),
+    // not opportunity itself — a workhorse in a bad offense has high
+    // opportunity but modest output. Usage is the true signal. Fall back to
+    // the production heuristic when advanced usage isn't available (rookies,
+    // unmatched names).
+    const usageOpp = advancedStats ? this._usageOpportunity(pos, advancedStats) : null;
+    const productionOpp = Math.min(100,
       (seasonAvg / this._posBaseline(pos)) * 50 +
-      (trendDir === "up" ? 15 : trendDir === "down" ? -10 : 5) +
-      (scores.length >= 8 ? 10 : scores.length >= 4 ? 5 : 0) +
-      injOppAdj
-    ));
+      (scores.length >= 8 ? 10 : scores.length >= 4 ? 5 : 0)
+    );
+    const oppBase = usageOpp != null ? (usageOpp * 0.8 + productionOpp * 0.2) : productionOpp;
+    // Injury modifier: when usage-based, only penalize (usage already reflects
+    // a healthy role, so no "healthy bonus" is needed). Fallback keeps injOppAdj.
+    const injUsageAdj = usageOpp != null
+      ? (!injStatus || isOffseasonInjury ? 0
+        : injStatus === "Questionable" ? -8
+        : injStatus === "Doubtful" ? -20 : -30)
+      : injOppAdj;
+    const oppScore = Math.max(0, Math.min(100, Math.round(
+      oppBase +
+      (trendDir === "up" ? 8 : trendDir === "down" ? -8 : 2) +
+      injUsageAdj
+    )));
+    const opportunitySource = usageOpp != null ? "usage_nflverse" : "production_heuristic";
 
     const mean   = seasonAvg;
     const stddev = scores.length > 1
@@ -195,6 +215,7 @@ export const PlayerIntelligence = {
         projectionSource:         ppgSource,
         matchupSource:            oppTeam ? "sleeper_opponent_abbr" : "no_opponent_data",
         advancedSource:           advancedStats ? "nflverse" : "unmatched",
+        opportunitySource,
         wopr:                     advancedStats?.wopr ?? null,
         targetShare:              advancedStats?.targetShare ?? null,
         snapPct:                  advancedStats?.snapPct ?? null,
@@ -223,6 +244,36 @@ export const PlayerIntelligence = {
 
   _posBaseline(pos) {
     return { QB: 22, RB: 16, WR: 14, TE: 10, K: 8, DST: 8 }[pos] || 12;
+  },
+
+  /**
+   * Real-usage opportunity score (0–100) from NFLverse advanced metrics.
+   * Position-specific because the meaningful opportunity signal differs:
+   *   WR/TE → WOPR (weighted targets + air yards) is the premier metric
+   *   RB    → snap share (workhorse vs committee) + pass-game role
+   *   QB    → snap share ≈ starter status
+   * Returns null if there's no usable signal.
+   */
+  _usageOpportunity(pos, adv) {
+    if (!adv) return null;
+    const clamp = v => Math.max(0, Math.min(100, v));
+    const snap = typeof adv.snapPct === "number" ? adv.snapPct : null; // 0..1
+    const wopr = typeof adv.wopr === "number" ? adv.wopr : 0;          // 0..~0.9
+    const ts   = typeof adv.targetShare === "number" ? adv.targetShare : 0; // 0..~0.4
+
+    if (pos === "WR" || pos === "TE") {
+      return clamp(wopr * 100 + (snap != null ? snap * 15 : 0));
+    }
+    if (pos === "RB") {
+      // Snap share + pass-game role + carry volume (so bell-cow rushers whose
+      // team rotates their snaps — e.g. Henry — aren't undervalued).
+      const cpg = adv.games ? (adv.carries || 0) / adv.games : 0;
+      return clamp((snap != null ? snap * 70 : 35) + ts * 80 + Math.min(25, cpg * 1.3));
+    }
+    if (pos === "QB") {
+      return snap != null ? clamp(snap * 90) : 60;
+    }
+    return null;
   },
 
   // Returns true when injury_notes/injury_body_part indicate a post-surgery offseason
