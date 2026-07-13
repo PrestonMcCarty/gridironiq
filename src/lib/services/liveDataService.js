@@ -42,12 +42,18 @@ function makeSlot(label, ttlMs) {
 }
 
 /**
- * The 8 completed weeks the stats slot fetches, oldest → newest.
- * Exported so consumers can fetch the matching per-week schedule and keep
- * the two arrays index-aligned (used for defense-allowed matchup rankings).
+ * Every completed week of the current season (1 → CURRENT_WEEK), oldest → newest.
+ * Fetching the full season makes seasonAvg / consistency / boom-bust truly
+ * season-long (not an 8-week window) and gives the defense-allowed rankings a
+ * larger, more accurate sample. Recent-form metrics (last4/last8) still slice
+ * the tail of this same array.
+ *
+ * Exported so consumers can fetch the matching per-week schedule and keep the
+ * two arrays index-aligned (used for defense-allowed matchup rankings).
  */
 export function getStatWeeks() {
-  return Array.from({ length: 8 }, (_, i) => Math.max(1, CURRENT_WEEK - 7 + i));
+  const last = Math.max(1, Math.min(18, CURRENT_WEEK));
+  return Array.from({ length: last }, (_, i) => i + 1);
 }
 
 const _slots = {
