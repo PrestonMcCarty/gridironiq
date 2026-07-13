@@ -134,7 +134,7 @@ export const PlayerIntelligence = {
     const aiRec = AIExplanationEngine.generate({
       name: sp.full_name || sp.first_name + " " + sp.last_name,
       pos, team, ppg, seasonAvg, last4Avg, last8Avg,
-      trendDir, trendPct, oppScore, consistencyScore,
+      trendDir, trendPct, opportunityScore: oppScore, consistencyScore,
       boomPct, bustPct, sosScore, playoffSosScore, bye: byeWeekMap[sp.team] || sp.bye_week || null, injuryRiskScore,
       matchupGrade, rawDefRank, oppTeam, adp: resolvedAdp, fcVal, injStatus, scores,
       staleFlags, seasonStarted,
@@ -286,7 +286,7 @@ export const PlayerIntelligence = {
 
     const aiRec = AIExplanationEngine.generate({
       name: teamName, pos: "DST", team, ppg, seasonAvg, last4Avg, last8Avg,
-      trendDir, trendPct, oppScore: 50, consistencyScore,
+      trendDir, trendPct, opportunityScore: 50, consistencyScore,
       boomPct, bustPct, sosScore, playoffSosScore, bye: byeWeekMap[sp.team] || sp.bye_week || null, injuryRiskScore: 90,
       matchupGrade, rawDefRank, oppTeam, adp: resolvedAdp, fcVal, injStatus: null, scores,
     });
@@ -414,7 +414,7 @@ export const PlayerIntelligence = {
 
     const aiRec = AIExplanationEngine.generate({
       name, pos: "K", team, ppg, seasonAvg, last4Avg, last8Avg,
-      trendDir, trendPct, oppScore: 50, consistencyScore,
+      trendDir, trendPct, opportunityScore: 50, consistencyScore,
       boomPct, bustPct, sosScore, playoffSosScore: (defRanksByPos["K"] ? Math.round(((32 - (defRanksByPos["K"][sp.team] || 16)) / 31) * 94 + 3) : sosScore), bye: byeWeekMap[sp.team] || sp.bye_week || null, injuryRiskScore,
       matchupGrade, rawDefRank, oppTeam, adp: resolvedAdp, fcVal, injStatus, scores,
       staleFlags: kStaleFlags,
