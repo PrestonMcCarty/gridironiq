@@ -112,6 +112,20 @@ export const PlayerModal = ({ player, onClose }) => {
             </div>
           )}
 
+          {/* Vegas scoring environment */}
+          {p.vegas && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, background: C.surface2, borderRadius: 10, border: `1px solid ${C.border}`, padding: "10px 14px" }}>
+              <span style={{ fontSize: 10, fontWeight: 800, color: C.muted, letterSpacing: 1.5, fontFamily: "monospace" }}>VEGAS</span>
+              <span style={{ fontFamily: "monospace", fontSize: 15, fontWeight: 900, color: p.vegas.impliedTotal >= 26 ? C.accent : p.vegas.impliedTotal <= 19 ? C.danger : C.text }}>
+                {p.vegas.impliedTotal} <span style={{ fontSize: 9, color: C.muted, fontWeight: 600 }}>implied pts</span>
+              </span>
+              <span style={{ fontSize: 11, color: C.muted, fontFamily: "monospace" }}>O/U {p.vegas.total}</span>
+              <span style={{ fontSize: 11, color: C.muted, fontFamily: "monospace", marginLeft: "auto" }}>
+                {p.vegas.homeAway === "away" ? "@" : "vs"} {p.vegas.opponent} ({p.vegas.spread > 0 ? "+" : ""}{p.vegas.spread})
+              </span>
+            </div>
+          )}
+
           {/* History */}
           {p.history?.length > 0 && <HistoryBar history={p.history} ppg={p.ppg} />}
 

@@ -18,6 +18,7 @@ import { SleeperService }     from "@/lib/services/sleeper";
 import { FantasyCalcService } from "@/lib/services/fantasycalc";
 import { ESPNService }        from "@/lib/services/espn";
 import { NFLverseAdvancedService } from "@/lib/services/nflverseAdvanced";
+import { OddsService }         from "@/lib/services/oddsService";
 import { cache }              from "@/lib/cache";
 import { CURRENT_SEASON, CURRENT_WEEK } from "@/lib/constants";
 
@@ -30,6 +31,7 @@ const TTL = {
   fantasyCalc: 60 * 60_000,   //  1 hr
   schedule:    15 * 60_000,   // 15 min — ESPN opponent map
   advanced:    6 * 60 * 60_000, //  6 hr — NFLverse advanced usage (updates weekly)
+  vegas:       3 * 60 * 60_000, //  3 hr — Vegas implied totals (conserve odds quota)
 };
 
 // Cache keys used by SleeperService / FantasyCalcService (must match their fetchJSON calls)
@@ -66,6 +68,7 @@ const _slots = {
   fantasyCalc: makeSlot("ADP + trade values",          TTL.fantasyCalc),
   schedule:    makeSlot("Weekly schedule + opponents", TTL.schedule),
   advanced:    makeSlot("NFLverse advanced usage",     TTL.advanced),
+  vegas:       makeSlot("Vegas implied team totals",   TTL.vegas),
 };
 
 const _listeners = new Set();
@@ -113,6 +116,9 @@ async function _fetchSlot(slotName, isSuperflex = false) {
         break;
       case "advanced":
         data = await NFLverseAdvancedService.getAdvanced(CURRENT_SEASON);
+        break;
+      case "vegas":
+        data = await OddsService.getVegas();
         break;
       default:
         return;
@@ -171,6 +177,7 @@ export const LiveDataService = {
       fantasyCalc: _slots.fantasyCalc.data,
       schedule:    _slots.schedule.data,
       advanced:    _slots.advanced.data,
+      vegas:       _slots.vegas.data,
       fetchedAt: {
         players:     _slots.players.fetchedAt,
         projections: _slots.projections.fetchedAt,
@@ -179,6 +186,7 @@ export const LiveDataService = {
         fantasyCalc: _slots.fantasyCalc.fetchedAt,
         schedule:    _slots.schedule.fetchedAt,
         advanced:    _slots.advanced.fetchedAt,
+        vegas:       _slots.vegas.fetchedAt,
       },
     };
   },

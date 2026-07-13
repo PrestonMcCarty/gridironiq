@@ -3,7 +3,7 @@ import { AIExplanationEngine } from "@/lib/engines/aiExplanation";
 import { CURRENT_SEASON, defRankToGrade, defRankToLabel } from "@/lib/constants";
 
 export const PlayerIntelligence = {
-  compute(sleeperPlayer, weeklyScores = [], projData = null, fcValue = null, defRanksByPos = {}, scoring = "PPR", nextOpp = null, positionalRank = null, byeWeekMap = {}, fetchedAt = {}, seasonStarted = true, advancedStats = null) {
+  compute(sleeperPlayer, weeklyScores = [], projData = null, fcValue = null, defRanksByPos = {}, scoring = "PPR", nextOpp = null, positionalRank = null, byeWeekMap = {}, fetchedAt = {}, seasonStarted = true, advancedStats = null, vegasEnv = null) {
     const sp  = sleeperPlayer;
     const pos = sp.position || sp.fantasy_positions?.[0] || "?";
 
@@ -192,6 +192,8 @@ export const PlayerIntelligence = {
       boomPct, bustPct, sosScore, playoffSosScore, bye: byeWeekMap[sp.team] || sp.bye_week || null, injuryRiskScore,
       // Real usage metrics from NFLverse (null until matched / in-season data exists)
       advanced:        advancedStats || null,
+      // Vegas scoring environment for this player's team (null if odds not configured)
+      vegas:           vegasEnv || null,
       fcValue:         fcVal,
       history:         this._buildHistory(scores),
       matchup: oppTeam ? {
@@ -219,6 +221,8 @@ export const PlayerIntelligence = {
         wopr:                     advancedStats?.wopr ?? null,
         targetShare:              advancedStats?.targetShare ?? null,
         snapPct:                  advancedStats?.snapPct ?? null,
+        vegasImpliedTotal:        vegasEnv?.impliedTotal ?? null,
+        vegasTotal:               vegasEnv?.total ?? null,
         historicalWeeksUsed:      scores.length,
         missingOpponent:          !oppTeam,
         missingProjection:        !projData,
