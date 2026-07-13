@@ -17,6 +17,7 @@
 import { SleeperService }     from "@/lib/services/sleeper";
 import { FantasyCalcService } from "@/lib/services/fantasycalc";
 import { ESPNService }        from "@/lib/services/espn";
+import { NFLverseAdvancedService } from "@/lib/services/nflverseAdvanced";
 import { cache }              from "@/lib/cache";
 import { CURRENT_SEASON, CURRENT_WEEK } from "@/lib/constants";
 
@@ -28,6 +29,7 @@ const TTL = {
   stats:       24 * 60 * 60_000, // 24 hr
   fantasyCalc: 60 * 60_000,   //  1 hr
   schedule:    15 * 60_000,   // 15 min — ESPN opponent map
+  advanced:    6 * 60 * 60_000, //  6 hr — NFLverse advanced usage (updates weekly)
 };
 
 // Cache keys used by SleeperService / FantasyCalcService (must match their fetchJSON calls)
@@ -63,6 +65,7 @@ const _slots = {
   stats:       makeSlot("Historical weekly stats",     TTL.stats),
   fantasyCalc: makeSlot("ADP + trade values",          TTL.fantasyCalc),
   schedule:    makeSlot("Weekly schedule + opponents", TTL.schedule),
+  advanced:    makeSlot("NFLverse advanced usage",     TTL.advanced),
 };
 
 const _listeners = new Set();
@@ -107,6 +110,9 @@ async function _fetchSlot(slotName, isSuperflex = false) {
         break;
       case "schedule":
         data = await ESPNService.getScheduleMap();
+        break;
+      case "advanced":
+        data = await NFLverseAdvancedService.getAdvanced(CURRENT_SEASON);
         break;
       default:
         return;
@@ -164,6 +170,7 @@ export const LiveDataService = {
       stats:       _slots.stats.data,
       fantasyCalc: _slots.fantasyCalc.data,
       schedule:    _slots.schedule.data,
+      advanced:    _slots.advanced.data,
       fetchedAt: {
         players:     _slots.players.fetchedAt,
         projections: _slots.projections.fetchedAt,
@@ -171,6 +178,7 @@ export const LiveDataService = {
         stats:       _slots.stats.fetchedAt,
         fantasyCalc: _slots.fantasyCalc.fetchedAt,
         schedule:    _slots.schedule.fetchedAt,
+        advanced:    _slots.advanced.fetchedAt,
       },
     };
   },

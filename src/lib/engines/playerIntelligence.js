@@ -3,7 +3,7 @@ import { AIExplanationEngine } from "@/lib/engines/aiExplanation";
 import { CURRENT_SEASON, defRankToGrade, defRankToLabel } from "@/lib/constants";
 
 export const PlayerIntelligence = {
-  compute(sleeperPlayer, weeklyScores = [], projData = null, fcValue = null, defRanksByPos = {}, scoring = "PPR", nextOpp = null, positionalRank = null, byeWeekMap = {}, fetchedAt = {}, seasonStarted = true) {
+  compute(sleeperPlayer, weeklyScores = [], projData = null, fcValue = null, defRanksByPos = {}, scoring = "PPR", nextOpp = null, positionalRank = null, byeWeekMap = {}, fetchedAt = {}, seasonStarted = true, advancedStats = null) {
     const sp  = sleeperPlayer;
     const pos = sp.position || sp.fantasy_positions?.[0] || "?";
 
@@ -170,6 +170,8 @@ export const PlayerIntelligence = {
       opportunityScore: Math.max(0, Math.min(100, oppScore)),
       consistencyScore,
       boomPct, bustPct, sosScore, playoffSosScore, bye: byeWeekMap[sp.team] || sp.bye_week || null, injuryRiskScore,
+      // Real usage metrics from NFLverse (null until matched / in-season data exists)
+      advanced:        advancedStats || null,
       fcValue:         fcVal,
       history:         this._buildHistory(scores),
       matchup: oppTeam ? {
@@ -192,6 +194,10 @@ export const PlayerIntelligence = {
       _debug: {
         projectionSource:         ppgSource,
         matchupSource:            oppTeam ? "sleeper_opponent_abbr" : "no_opponent_data",
+        advancedSource:           advancedStats ? "nflverse" : "unmatched",
+        wopr:                     advancedStats?.wopr ?? null,
+        targetShare:              advancedStats?.targetShare ?? null,
+        snapPct:                  advancedStats?.snapPct ?? null,
         historicalWeeksUsed:      scores.length,
         missingOpponent:          !oppTeam,
         missingProjection:        !projData,

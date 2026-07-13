@@ -4,6 +4,7 @@ import { SleeperService }        from "@/lib/services/sleeper";
 import { FantasyCalcService }    from "@/lib/services/fantasycalc";
 import { LiveDataService, getStatWeeks } from "@/lib/services/liveDataService";
 import { ESPNService }            from "@/lib/services/espn";
+import { NFLverseAdvancedService } from "@/lib/services/nflverseAdvanced";
 import { PlayerIntelligence, computeDefensiveRankings } from "@/lib/engines/playerIntelligence";
 import { initNflState, CURRENT_SEASON, CURRENT_WEEK } from "@/lib/constants";
 import { NFLScheduleService }    from "@/lib/data/nflSchedule";
@@ -46,6 +47,7 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
       const weekProj       = live.projections || {};
       const multiWeekStats = live.stats || [];
       const scheduleOpps   = live.schedule?.opponents || {};
+      const advancedMap    = live.advanced?.players || {};
       // Global offseason signal: have any games been played in the fetched weeks?
       const seasonStarted  = Array.isArray(multiWeekStats)
         && multiWeekStats.some(ws => ws && Object.keys(ws).length > 0);
@@ -134,12 +136,14 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
         if (posCounter[sp.position] !== undefined) posCounter[sp.position]++;
         const currentPosRank = posCounter[sp.position] || null;
 
+        const advanced = NFLverseAdvancedService.lookup(sp, advancedMap);
         return PlayerIntelligence.compute(
           sp,
           weeklyScores, proj, fc, defRanksByPos, scoring, nextOpp,
           currentPosRank, byeWeekMap,
           live.fetchedAt,  // ← freshness timestamps for _live metadata
           seasonStarted,   // ← global offseason signal
+          advanced,        // ← NFLverse advanced usage (wopr, snap%, target share)
         );
       });
 
@@ -236,6 +240,7 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
     const trending = live.trending || [];
     const multiWeekStats = live.stats;
     const scheduleOpps = live.schedule?.opponents || {};
+    const advancedMap = live.advanced?.players || {};
     const seasonStarted = Array.isArray(multiWeekStats)
       && multiWeekStats.some(ws => ws && Object.keys(ws).length > 0);
     const trendingIds = new Set(trending.map(t => t.player_id));
@@ -272,6 +277,7 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
         p.posRank, byeWeekMapRef.current,
         live.fetchedAt,
         seasonStarted,
+        NFLverseAdvancedService.lookup(sp, advancedMap),
       );
 
       // Preserve fields that don't change on live refresh

@@ -90,6 +90,28 @@ export const PlayerModal = ({ player, onClose }) => {
             </div>
           </div>
 
+          {/* Real usage — NFLverse advanced metrics */}
+          {p.advanced && (
+            <div style={{ background: C.surface2, borderRadius: 10, border: `1px solid ${C.border}`, padding: 14 }}>
+              <div style={{ fontSize: 10, fontWeight: 800, color: C.muted, letterSpacing: 1.5, fontFamily: "monospace", marginBottom: 10 }}>
+                REAL USAGE · {p.advanced.games}G <span style={{ color: C.blue }}>NFLverse</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
+                {[
+                  { l: "SNAP %",   v: p.advanced.snapPct != null ? `${Math.round(p.advanced.snapPct * 100)}%` : "—" },
+                  { l: "TGT SHARE", v: p.advanced.targetShare ? `${Math.round(p.advanced.targetShare * 100)}%` : "—" },
+                  { l: "AIR YDS %", v: p.advanced.airYardsShare ? `${Math.round(p.advanced.airYardsShare * 100)}%` : "—" },
+                  { l: "WOPR",     v: p.advanced.wopr != null ? p.advanced.wopr.toFixed(2) : "—" },
+                ].map(s => (
+                  <div key={s.l} style={{ textAlign: "center", background: C.bg, borderRadius: 6, padding: "6px 4px" }}>
+                    <div style={{ fontFamily: "monospace", fontSize: 14, fontWeight: 800, color: C.blue }}>{s.v}</div>
+                    <div style={{ fontSize: 8, color: C.muted, letterSpacing: 1 }}>{s.l}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* History */}
           {p.history?.length > 0 && <HistoryBar history={p.history} ppg={p.ppg} />}
 
