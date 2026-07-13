@@ -19,7 +19,7 @@ export const PlayersPage = () => {
     players
       .filter(p => posFilter === "ALL" || p.pos === posFilter)
       .filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
-      .filter(p => !showWaiver || ((p.news || []).some(n => n.waiver) || (p.owned || 100) < 50))
+      .filter(p => !showWaiver || (p.news || []).some(n => n.waiver))
       .sort((a, b) =>
         sortBy === "ppg"  ? b.ppg - a.ppg :
         sortBy === "adp"  ? (a.adp ?? 999) - (b.adp ?? 999) :
@@ -49,7 +49,7 @@ export const PlayersPage = () => {
         <button onClick={() => setShowWaiver(v => !v)} style={{ background: showWaiver ? "#22C55E20" : C.surface, border: `1px solid ${showWaiver ? C.accent : C.border}`, borderRadius: 6, padding: "5px 12px", fontSize: 11, color: showWaiver ? C.accent : C.muted, cursor: "pointer", fontWeight: 700 }}>📋 Waiver Targets</button>
         {["ppg","adp","conf","opp"].map(s => (
           <button key={s} onClick={() => setSortBy(s)} style={{ background: sortBy === s ? "#3B82F620" : C.surface, border: `1px solid ${sortBy === s ? C.blue : C.border}`, borderRadius: 6, padding: "5px 9px", fontSize: 11, color: sortBy === s ? C.blue : C.muted, cursor: "pointer", fontFamily: "monospace", fontWeight: 700 }}>
-            {s === "conf" ? "AI%" : s === "opp" ? "OPP" : s.toUpperCase()}
+            {s === "conf" ? "AI%" : s === "opp" ? "OPP" : s === "adp" ? "RANK" : s.toUpperCase()}
           </button>
         ))}
       </div>
@@ -129,13 +129,12 @@ export const PlayersPage = () => {
                 <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, borderTop: `1px solid ${C.border}` }}>
                   {[
                     {
-                      l: p.positionalAdp != null ? `ADP·${p.pos}${Math.ceil(p.positionalAdp)}` : "ADP",
+                      l: "RANK",
                       v: p.adp != null
-                        ? `${p.adp.toFixed(1)}${p.adpTrend === "rising" ? "▲" : p.adpTrend === "falling" ? "▼" : ""}${p.adpSource === "estimated" ? "~" : ""}`
+                        ? `${Math.round(p.adp)}${p.adpTrend === "rising" ? "▲" : p.adpTrend === "falling" ? "▼" : ""}${p.adpSource === "estimated" ? "~" : ""}`
                         : "—",
                       col: p.adpTrend === "rising" ? C.accent : p.adpTrend === "falling" ? C.danger : C.text,
                     },
-                    { l: "OWNED", v: `${p.owned || "?"}%`, col: C.text },
                     { l: "OPP",   v: p.opportunityScore || "—", col: C.text },
                   ].map(s => (
                     <div key={s.l} style={{ textAlign: "center" }}>

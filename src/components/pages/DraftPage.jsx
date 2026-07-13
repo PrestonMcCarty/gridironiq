@@ -433,7 +433,7 @@ export const DraftPage = ({ settings }) => {
                 <div style={{ display: "flex", gap: 8 }}>
                   <div style={{ flex: 1, background: C.surface2, borderRadius: 7, padding: "8px 6px", textAlign: "center" }}>
                     <div style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 800, color: C.muted }}>{valuePick.adp}</div>
-                    <div style={{ fontSize: 8, color: C.muted, letterSpacing: 1, marginTop: 2 }}>ADP</div>
+                    <div style={{ fontSize: 8, color: C.muted, letterSpacing: 1, marginTop: 2 }}>RANK</div>
                   </div>
                   <div style={{ flex: 1, background: C.surface2, borderRadius: 7, padding: "8px 6px", textAlign: "center" }}>
                     <div style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 800, color: C.text }}>{pick}</div>
@@ -502,7 +502,7 @@ export const DraftPage = ({ settings }) => {
                 <div style={{ display: "flex", gap: 8 }}>
                   <div style={{ flex: 1, background: C.surface2, borderRadius: 7, padding: "8px 6px", textAlign: "center" }}>
                     <div style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 800, color: C.muted }}>{reachWarning.adp}</div>
-                    <div style={{ fontSize: 8, color: C.muted, letterSpacing: 1, marginTop: 2 }}>ADP</div>
+                    <div style={{ fontSize: 8, color: C.muted, letterSpacing: 1, marginTop: 2 }}>RANK</div>
                   </div>
                   <div style={{ flex: 1, background: C.surface2, borderRadius: 7, padding: "8px 6px", textAlign: "center" }}>
                     <div style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 800, color: C.text }}>{reachWarning.currentPick}</div>
@@ -560,7 +560,7 @@ export const DraftPage = ({ settings }) => {
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 560 }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                {["ADP","PLAYER","POS","PPG","WK","OPP","CONF","▲▼","STATUS",""].map(h => (
+                {["RANK","PLAYER","POS","PPG","WK","OPP","CONF","▲▼","STATUS",""].map(h => (
                   <th key={h} style={{ padding: "10px 10px", textAlign: "left", fontSize: 10, fontFamily: "monospace", fontWeight: 700, color: C.muted, letterSpacing: 1.5, background: C.surface, whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
@@ -577,7 +577,7 @@ export const DraftPage = ({ settings }) => {
                     onMouseEnter={e => e.currentTarget.style.background = "#22C55E0d"}
                     onMouseLeave={e => e.currentTarget.style.background = (isBO || isBT || isSL) ? "#22C55E07" : i % 2 === 0 ? "transparent" : "#ffffff02"}>
                     <td style={{ padding: "10px 10px", fontFamily: "monospace", fontSize: 11, color: C.muted, whiteSpace: "nowrap" }}>
-                      {p.adp != null ? p.adp.toFixed(1) : "—"}
+                      {p.adp != null ? Math.round(p.adp) : "—"}
                       {p.adpTrend === "rising"  && <span style={{ color: C.accent, marginLeft: 3, fontSize: 9 }}>▲</span>}
                       {p.adpTrend === "falling" && <span style={{ color: C.danger, marginLeft: 3, fontSize: 9 }}>▼</span>}
                       {p.adpSource === "estimated" && <span style={{ color: C.muted, marginLeft: 2, fontSize: 8, opacity: 0.6 }}>~</span>}

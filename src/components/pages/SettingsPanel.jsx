@@ -55,7 +55,7 @@ export const SettingsPanel = ({ settings, setSettings, onClose }) => (
       </div>
 
       <div style={{ marginBottom: 14, fontSize: 11, color: C.muted, background: C.surface2, borderRadius: 8, padding: 12, lineHeight: 1.6 }}>
-        <span style={{ color: C.accent, fontWeight: 700 }}>Data sources:</span> Sleeper API (players, stats, projections) + FantasyCalc (ADP, trade values). Intelligence Engine re-runs on every settings change.
+        <span style={{ color: C.accent, fontWeight: 700 }}>Data sources:</span> Sleeper API (players, stats, projections) + ESPN (schedule/opponents) + FantasyCalc (rankings, trade values). Intelligence Engine re-runs on every settings change.
       </div>
 
       <button onClick={onClose} style={{ width: "100%", background: C.accent, border: "none", borderRadius: 8, padding: "10px", fontSize: 13, fontWeight: 800, color: "#000", cursor: "pointer" }}>

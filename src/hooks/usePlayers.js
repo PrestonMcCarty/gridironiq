@@ -135,7 +135,7 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
         const currentPosRank = posCounter[sp.position] || null;
 
         return PlayerIntelligence.compute(
-          { ...sp, ownership_pct: trendingIds.has(pid) ? (sp.ownership ?? 50) : (sp.ownership ?? 20) },
+          sp,
           weeklyScores, proj, fc, defRanksByPos, scoring, nextOpp,
           currentPosRank, byeWeekMap,
           live.fetchedAt,  // ← freshness timestamps for _live metadata
@@ -146,7 +146,7 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
       enriched.forEach(p => {
         p.news = p.news.map(n => ({
           ...n,
-          waiver: n.waiver || (trendingIds.has(p.sleeperPlayerId) && (p.owned || 0) < 60),
+          waiver: n.waiver || trendingIds.has(p.sleeperPlayerId),
         }));
       });
 
@@ -265,8 +265,7 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
       const fc           = FantasyCalcService.lookup(sp, fcNameMapRef.current);
 
       const recomputed = PlayerIntelligence.compute(
-        { ...sp, player_id: pid, position: sp.position === "DEF" ? "DST" : sp.position,
-          ownership_pct: trendingIds.has(pid) ? (sp.ownership ?? 50) : (sp.ownership ?? 20) },
+        { ...sp, player_id: pid, position: sp.position === "DEF" ? "DST" : sp.position },
         weeklyScores, proj, fc,
         defRanksByPosRef.current, scoring,
         sp.opponent_abbr || scheduleOpps[sp.team]?.opp || null,
@@ -287,7 +286,7 @@ export function usePlayers(scoring = "PPR", isSuperflex = false) {
         positionFinish2024: p.positionFinish2024,
         news: recomputed.news.map(n => ({
           ...n,
-          waiver: n.waiver || (trendingIds.has(pid) && (recomputed.owned || 0) < 60),
+          waiver: n.waiver || trendingIds.has(pid),
         })),
       };
     });

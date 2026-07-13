@@ -27,7 +27,6 @@ export const PlayerModal = ({ player, onClose }) => {
               <PosBadge pos={p.pos} />
               <span style={{ fontSize: 11, fontFamily: "monospace", color: C.muted }}>{p.team}</span>
               <InjuryBadge status={p.injury} />
-              {p.owned > 0 && <span style={{ fontSize: 10, color: C.muted, fontFamily: "monospace" }}>{p.owned}% owned</span>}
             </div>
             <h2 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: C.text, letterSpacing: -0.5 }}>{p.name}</h2>
           </div>
@@ -41,11 +40,9 @@ export const PlayerModal = ({ player, onClose }) => {
             { l: `${p.pos} RANK`, v: `#${posRank}`,               col: C.text   },
             { l: "L4 AVG",  v: p.last4Avg?.toFixed(1) || "—",     col: p.trend === "up" ? C.accent : p.trend === "down" ? C.danger : C.text },
             {
-              l: p.positionalAdp != null
-                ? `ADP · ${p.pos}${Math.ceil(p.positionalAdp)}`
-                : "ADP",
+              l: "RANK",
               v: p.adp != null
-                ? `${p.adp.toFixed(1)}${p.adpTrend === "rising" ? " ▲" : p.adpTrend === "falling" ? " ▼" : ""}${p.adpSource === "estimated" ? "~" : ""}`
+                ? `${Math.round(p.adp)}${p.adpTrend === "rising" ? " ▲" : p.adpTrend === "falling" ? " ▼" : ""}${p.adpSource === "estimated" ? "~" : ""}`
                 : "—",
               col: p.adpTrend === "rising" ? C.accent : p.adpTrend === "falling" ? C.danger : C.text,
             },

@@ -107,7 +107,7 @@ export const RecCard = ({ label, rec, color, icon, onDraft, onView, currentPick 
       {/* Stats row: ADP · Value · Scarcity */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 5 }}>
         {[
-          { val: p.adp != null ? Math.round(p.adp) : "—", sub: "ADP",      col: C.text  },
+          { val: p.adp != null ? Math.round(p.adp) : "—", sub: "RANK",     col: C.text  },
           { val: valueScore === null ? "—" : valueScore > 0 ? `+${valueScore}` : valueScore === 0 ? "~0" : `${valueScore}`, sub: "VALUE", col: valueCol },
           { val: scarcity || "—", sub: "SCARCITY", col: scarCol },
         ].map(s => (

@@ -163,7 +163,6 @@ export const PlayerIntelligence = {
       adpDelta,   // raw pick-number movement
       trend:           trendDir,
       injury,
-      owned:           Math.round(sp.ownership_pct ?? 0),
       seasonAvg:       parseFloat(seasonAvg.toFixed(2)),
       last4Avg:        parseFloat(last4Avg.toFixed(2)),
       last8Avg:        parseFloat(last8Avg.toFixed(2)),
@@ -303,7 +302,6 @@ export const PlayerIntelligence = {
       positionalAdp, adpTrend, adpDelta,
       trend:           trendDir,
       injury:          null,
-      owned:           Math.round(sp.ownership_pct ?? 0),
       seasonAvg:       parseFloat(seasonAvg.toFixed(2)),
       last4Avg:        parseFloat(last4Avg.toFixed(2)),
       last8Avg:        parseFloat(last8Avg.toFixed(2)),
@@ -432,7 +430,6 @@ export const PlayerIntelligence = {
       positionalAdp, adpTrend, adpDelta,
       trend:           trendDir,
       injury,
-      owned:           Math.round(sp.ownership_pct ?? 0),
       seasonAvg:       parseFloat(seasonAvg.toFixed(2)),
       last4Avg:        parseFloat(last4Avg.toFixed(2)),
       last8Avg:        parseFloat(last8Avg.toFixed(2)),

@@ -50,7 +50,7 @@ export const DraftExplanationPanel = ({ explanation, color, playerName }) => {
             RECOMMENDATION STRENGTH
           </div>
           <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
-            Based on rank, ADP, roster context, and tier
+            Based on rank, roster context, and tier
           </div>
         </div>
         <div style={{ fontFamily: "monospace", fontSize: 26, fontWeight: 900, color: strengthColor }}>
