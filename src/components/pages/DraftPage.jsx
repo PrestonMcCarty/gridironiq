@@ -46,18 +46,22 @@ export const DraftPage = ({ settings }) => {
   const [myPickIds,  setMyPickIds]  = useState([]);
   const [allDrafted, setAllDrafted] = useState(new Set());
   const [pick,       setPick]       = useState(1);
+  const [draftSlot,  setDraftSlot]  = useState(1);   // 1-indexed draft position (1..teams)
   const [posFilter,  setPosFilter]  = useState("ALL");
   const [search,     setSearch]     = useState("");
   const [modal,      setModal]      = useState(null);
   const [showSync,   setShowSync]   = useState(false);
 
+  // Clamp the slot to the league size (e.g. switching 12→10 teams).
+  const mySpot = Math.min(Math.max(1, draftSlot), settings.teams);
+
   const totalRoster = Object.values(settings.slots).reduce((a, b) => a + b, 0);
   const myPickNums  = useMemo(() => {
-    const picks = []; const mySpot = 1;
+    const picks = [];
     for (let r = 0; r < totalRoster; r++)
       picks.push(r % 2 === 0 ? r * settings.teams + mySpot : (r + 1) * settings.teams - (mySpot - 1));
     return picks;
-  }, [settings, totalRoster]);
+  }, [settings, totalRoster, mySpot]);
 
   const isMyPick    = myPickNums.includes(pick);
   const myPosCounts = useMemo(() => {
@@ -392,9 +396,20 @@ export const DraftPage = ({ settings }) => {
             {" "}· {settings.teams} teams · {settings.scoring}{settings.superflex ? " · SF" : ""} · {myPickIds.length} on my team · {allDrafted.size} off board
           </p>
         </div>
-        <button onClick={() => setShowSync(v => !v)} style={{ background: showSync ? "#22C55E20" : C.surface2, border: `1px solid ${showSync ? C.accent : C.border}`, borderRadius: 8, padding: "7px 14px", fontSize: 11, color: showSync ? C.accent : C.muted, cursor: "pointer", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
-          <SyncIcon c={showSync ? C.accent : C.muted} /> Live Sync
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "6px 10px" }}>
+            <span style={{ fontSize: 10, color: C.muted, fontFamily: "monospace", letterSpacing: 1 }}>DRAFT SLOT</span>
+            <select value={mySpot} onChange={e => setDraftSlot(Number(e.target.value))}
+              style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontSize: 12, fontWeight: 700, fontFamily: "monospace", padding: "2px 4px", cursor: "pointer", outline: "none" }}>
+              {Array.from({ length: settings.teams }, (_, i) => i + 1).map(n => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </label>
+          <button onClick={() => setShowSync(v => !v)} style={{ background: showSync ? "#22C55E20" : C.surface2, border: `1px solid ${showSync ? C.accent : C.border}`, borderRadius: 8, padding: "7px 14px", fontSize: 11, color: showSync ? C.accent : C.muted, cursor: "pointer", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
+            <SyncIcon c={showSync ? C.accent : C.muted} /> Live Sync
+          </button>
+        </div>
       </div>
       {showSync && <SleeperSync onPicksUpdate={handleSleeperSync} />}
 
