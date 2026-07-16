@@ -7,7 +7,7 @@ import { DataStatusBanner } from "@/components/ui/DataStatusBanner";
 import { PlayerModal } from "@/components/player/PlayerModal";
 
 export const TeamPage = ({ setPage }) => {
-  const { players, loading, error, refresh, myRosterIds, counts } = usePlayersCtx();
+  const { players, loading, error, refresh, myRosterIds, counts, rosters, myTeamId } = usePlayersCtx();
   const [modal, setModal] = useState(null);
 
   const roster = useMemo(() => {
@@ -40,11 +40,33 @@ export const TeamPage = ({ setPage }) => {
     [roster]
   );
 
-  const totalPPG     = roster.slice(0, 9).reduce((s, p) => s + (["IR","OUT"].includes(p.injury || "") ? 0 : p.ppg), 0);
-  const leagueAvgPPG = 120;
-  const winPct       = Math.min(0.85, Math.max(0.15, 0.5 + (totalPPG - leagueAvgPPG) / 180));
-  const projWins     = Math.round(winPct * 14);
-  const projLosses   = 14 - projWins;
+  // ── Real league-relative standings (computed from the actual rosters) ──────
+  const playerIndex = useMemo(() => {
+    const m = new Map();
+    players.forEach(p => { m.set(String(p.id), p); if (p.sleeperPlayerId) m.set(String(p.sleeperPlayerId), p); });
+    return m;
+  }, [players]);
+  const resolveRoster  = ids => (ids || []).map(id => playerIndex.get(String(id))).filter(Boolean);
+  // Roster strength = top-9 starters' PPG (excl. IR/OUT) — a consistent basis
+  // for comparing every team in the league.
+  const rosterStrength = ids => resolveRoster(ids)
+    .filter(p => !["IR", "OUT"].includes(p.injury || ""))
+    .sort((a, b) => b.ppg - a.ppg).slice(0, 9)
+    .reduce((s, p) => s + p.ppg, 0);
+
+  const totalPPG = rosterStrength(myRosterIds);
+
+  const leagueStrengths = useMemo(() =>
+    (rosters || [])
+      .map(r => ({ teamId: String(r.teamId), strength: rosterStrength(r.playerIds) }))
+      .sort((a, b) => b.strength - a.strength),
+    [rosters, playerIndex]   // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const totalTeams     = leagueStrengths.length;
+  const myStrengthRank = totalTeams ? leagueStrengths.findIndex(r => r.teamId === String(myTeamId)) + 1 : 0;
+  const leagueAvgPPG   = totalTeams ? Math.round(leagueStrengths.reduce((s, r) => s + r.strength, 0) / totalTeams) : 0;
+  const myRecord       = (rosters || []).find(r => String(r.teamId) === String(myTeamId))?.record || null;
+  const seasonStarted  = myRecord ? (myRecord.wins + myRecord.losses) > 0 : false;
 
   const posAvgPPG = pos => {
     const pl = (byPos[pos] || []).filter(p => p.injury !== "IR");
@@ -64,17 +86,32 @@ export const TeamPage = ({ setPage }) => {
 
   const weakPositions = posGrades.filter(p => p.grade === "C" || p.grade === "D");
   const injuryRisk    = roster.filter(p => p.injury);
-  const avgInjuryRisk = roster.length ? roster.reduce((s, p) => s + (p.injuryRiskScore || 90), 0) / roster.length : 90;
-  const depthScore    = Math.round(avgInjuryRisk);
 
-  const tradeTargets = useMemo(() =>
+  // Which players are rostered by OTHER teams (→ trade) vs unrostered (→ waiver add).
+  const rosteredElsewhere = useMemo(() => {
+    const set = new Set();
+    (rosters || []).forEach(r => {
+      if (String(r.teamId) === String(myTeamId)) return;
+      (r.playerIds || []).forEach(id => set.add(String(id)));
+    });
+    return set;
+  }, [rosters, myTeamId]);
+  const onMyRoster = id => myRosterIds.some(x => String(x) === String(id));
+
+  const upgradeTargets = useMemo(() =>
     weakPositions.flatMap(wp =>
       players
-        .filter(p => p.pos === wp.pos && !myRosterIds.some(id => String(id) === String(p.id) || String(id) === String(p.sleeperPlayerId)) && p.injury !== "OUT" && p.injury !== "IR" && (p.aiRecommendation?.confidence || 0) >= 60)
+        .filter(p => p.pos === wp.pos && !onMyRoster(p.id) && !onMyRoster(p.sleeperPlayerId) && p.injury !== "OUT" && p.injury !== "IR" && (p.aiRecommendation?.confidence || 0) >= 60)
         .sort((a, b) => (b.aiRecommendation?.confidence || 0) - (a.aiRecommendation?.confidence || 0))
         .slice(0, 2)
+        .map(p => ({
+          ...p,
+          // Only classify when we actually have league rosters loaded.
+          source: !rosters?.length ? null
+            : (rosteredElsewhere.has(String(p.sleeperPlayerId)) || rosteredElsewhere.has(String(p.id))) ? "trade" : "waiver",
+        }))
     ).slice(0, 4),
-    [weakPositions, players, myRosterIds]
+    [weakPositions, players, myRosterIds, rosteredElsewhere, rosters]   // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const gc2 = g => ({ A: C.accent, B: C.blue, C: C.warning, D: C.danger }[g] || C.muted);
@@ -85,7 +122,7 @@ export const TeamPage = ({ setPage }) => {
       <DataStatusBanner source="live" loading={loading} error={error} playerCount={players.length} counts={counts} refresh={refresh} />
       <div style={{ marginBottom: 16 }}>
         <h1 style={{ fontSize: 22, fontWeight: 900, color: C.text, margin: 0, letterSpacing: -0.5 }}>Team Review</h1>
-        <p style={{ color: C.muted, fontSize: 12, margin: "4px 0 0" }}>Full roster analysis · Projected record · Intelligence-driven trade recommendations</p>
+        <p style={{ color: C.muted, fontSize: 12, margin: "4px 0 0" }}>Full roster analysis · Roster strength vs your league · Trade &amp; waiver upgrade targets</p>
       </div>
 
       {!loading && roster.length === 0 && (
@@ -100,10 +137,25 @@ export const TeamPage = ({ setPage }) => {
       {/* Summary stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12, marginBottom: 16 }}>
         {[
-          { label: "PROJECTED RECORD", val: `${projWins}-${projLosses}`,    sub: `${Math.round(winPct * 100)}% win rate`,  color: projWins >= 8 ? C.accent : projWins >= 6 ? C.warning : C.danger },
-          { label: "ROSTER PPG",       val: totalPPG.toFixed(1),            sub: `League avg ~${leagueAvgPPG}`,             color: totalPPG > leagueAvgPPG ? C.accent : C.warning },
-          { label: "DEPTH SCORE",      val: `${depthScore}/100`,            sub: "Injury safety rating",                    color: depthScore >= 80 ? C.accent : depthScore >= 60 ? C.warning : C.danger },
-          { label: "INJURY RISKS",     val: injuryRisk.length,              sub: injuryRisk.length ? injuryRisk.map(p => p.name).join(", ") : "All healthy", color: injuryRisk.length ? C.danger : C.accent },
+          {
+            label: "RECORD",
+            val:   seasonStarted ? `${myRecord.wins}-${myRecord.losses}` : "Preseason",
+            sub:   seasonStarted ? `${Math.round(myRecord.pf)} PF · ${Math.round(myRecord.pa)} PA` : (totalTeams ? "Season not started" : "Connect a league"),
+            color: !seasonStarted ? C.muted : myRecord.wins > myRecord.losses ? C.accent : myRecord.wins < myRecord.losses ? C.danger : C.warning,
+          },
+          {
+            label: "ROSTER RANK",
+            val:   totalTeams ? `#${myStrengthRank}/${totalTeams}` : "—",
+            sub:   totalTeams ? `Stronger than ${totalTeams - myStrengthRank} of ${totalTeams - 1} rivals` : "Connect a league",
+            color: !totalTeams ? C.muted : myStrengthRank <= totalTeams / 3 ? C.accent : myStrengthRank <= (2 * totalTeams) / 3 ? C.warning : C.danger,
+          },
+          {
+            label: "ROSTER PPG",
+            val:   totalPPG.toFixed(1),
+            sub:   totalTeams ? `League avg ${leagueAvgPPG}` : "Top-9 starters",
+            color: !totalTeams ? C.text : totalPPG >= leagueAvgPPG ? C.accent : C.warning,
+          },
+          { label: "INJURY RISKS", val: injuryRisk.length, sub: injuryRisk.length ? injuryRisk.map(p => p.name).join(", ") : "All healthy", color: injuryRisk.length ? C.danger : C.accent },
         ].map(s => (
           <div key={s.label} style={{ background: C.surface, borderRadius: 10, border: `1px solid ${C.border}`, padding: 14 }}>
             <div style={{ fontSize: 9, color: C.muted, fontFamily: "monospace", letterSpacing: 1.5, marginBottom: 6 }}>{s.label}</div>
@@ -159,21 +211,29 @@ export const TeamPage = ({ setPage }) => {
         </div>
       )}
 
-      {/* Trade targets */}
-      {tradeTargets.length > 0 && (
+      {/* Upgrade targets — trade vs free agent, at your weak positions */}
+      {upgradeTargets.length > 0 && (
         <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, padding: 16 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <span style={{ fontSize: 10, fontWeight: 800, color: C.accent, fontFamily: "monospace", letterSpacing: 1.5 }}>🎯 AI TRADE TARGETS — FILL YOUR GAPS</span>
+            <span style={{ fontSize: 10, fontWeight: 800, color: C.accent, fontFamily: "monospace", letterSpacing: 1.5 }}>🎯 UPGRADE TARGETS — FILL YOUR GAPS</span>
             <button onClick={() => setPage("trades")} style={{ background: C.accent + "20", border: `1px solid ${C.accent}50`, borderRadius: 6, padding: "4px 10px", fontSize: 10, color: C.accent, cursor: "pointer", fontWeight: 700 }}>Open Trade Finder →</button>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 10 }}>
-            {tradeTargets.map(p => (
+            {upgradeTargets.map(p => {
+              const srcCfg = p.source === "trade"  ? { label: "TRADE",      col: C.blue }
+                           : p.source === "waiver" ? { label: "FREE AGENT", col: C.accent }
+                           : null;
+              return (
               <div key={p.id} onClick={() => setModal(p)} style={{ background: C.surface2, borderRadius: 8, border: `1px solid ${C.border}`, padding: 12, cursor: "pointer" }}
                 onMouseEnter={e => e.currentTarget.style.borderColor = C.accent + "50"} onMouseLeave={e => e.currentTarget.style.borderColor = C.border}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
                   <div>
                     <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{p.name}</div>
-                    <div style={{ display: "flex", gap: 5, marginTop: 3 }}><PosBadge pos={p.pos} /><span style={{ fontSize: 10, color: C.muted, fontFamily: "monospace" }}>{p.team}</span></div>
+                    <div style={{ display: "flex", gap: 5, marginTop: 3, alignItems: "center", flexWrap: "wrap" }}>
+                      <PosBadge pos={p.pos} />
+                      <span style={{ fontSize: 10, color: C.muted, fontFamily: "monospace" }}>{p.team}</span>
+                      {srcCfg && <span style={{ fontSize: 8, fontWeight: 800, color: srcCfg.col, background: srcCfg.col + "20", border: `1px solid ${srcCfg.col}40`, borderRadius: 3, padding: "1px 5px", letterSpacing: 0.8, fontFamily: "monospace" }}>{srcCfg.label}</span>}
+                    </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontFamily: "monospace", fontSize: 16, fontWeight: 800, color: C.accent }}>{p.ppg}</div>
@@ -182,11 +242,11 @@ export const TeamPage = ({ setPage }) => {
                 </div>
                 {p.aiRecommendation && (
                   <div style={{ fontSize: 10, color: C.muted, fontFamily: "monospace" }}>
-                    AI: <span style={{ color: C.accent, fontWeight: 700 }}>{p.aiRecommendation.confidence}% confidence</span> · {p.aiRecommendation.action}
+                    <span style={{ color: C.accent, fontWeight: 700 }}>{p.aiRecommendation.confidence}% confidence</span> · {p.aiRecommendation.action}
                   </div>
                 )}
               </div>
-            ))}
+            );})}
           </div>
         </div>
       )}
