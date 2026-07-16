@@ -6,22 +6,22 @@ export const LeagueTendenciesEngine = {
     const userMap  = {};
     users.forEach(u => { userMap[u.user_id] = u; });
     rosters.forEach(roster => {
-      const user    = userMap[roster.owner_id] || {};
+      const user    = userMap[roster.ownerId] || {};
       const profile = this.buildProfile(
-        { ...user, roster_id: roster.roster_id },
+        { ...user, roster_id: roster.teamId },
         roster, transactions, matchupHistory, players, rosters,
       );
-      profiles[roster.roster_id] = profile;
+      profiles[roster.teamId] = profile;
     });
     return profiles;
   },
 
   buildProfile(user, roster, transactions, matchupHistory, players, allRosters) {
     const userId   = user.user_id;
-    const rosterId = roster.roster_id;
+    const rosterId = roster.teamId;
 
-    const myTrades  = transactions.filter(t => t.type === "trade" && (t.roster_ids || []).map(String).includes(String(rosterId)));
-    const myWaivers = transactions.filter(t => (t.type === "waiver" || t.type === "free_agent") && (t.roster_ids || []).map(String).includes(String(rosterId)));
+    const myTrades  = transactions.filter(t => t.type === "trade" && (t.rosterIds || []).map(String).includes(String(rosterId)));
+    const myWaivers = transactions.filter(t => (t.type === "waiver" || t.type === "free_agent") && (t.rosterIds || []).map(String).includes(String(rosterId)));
     const tradeFreq  = myTrades.length;
     const tradeFreqLabel = tradeFreq >= 5 ? "Heavy Trader" : tradeFreq >= 2 ? "Occasional Trader" : "Reluctant to Trade";
 
@@ -42,20 +42,20 @@ export const LeagueTendenciesEngine = {
     const waiverPerWeek = CURRENT_WEEK > 0 ? myWaivers.length / CURRENT_WEEK : 0;
     const waiverLabel   = waiverPerWeek >= 2 ? "Aggressive Waiver User" : waiverPerWeek >= 0.8 ? "Moderate Waiver Activity" : "Passive on Waivers";
 
-    const wins       = roster.settings?.wins   || 0;
-    const losses     = roster.settings?.losses || 0;
-    const pf         = roster.settings?.fpts   || 0;
-    const pa         = roster.settings?.fpts_against || 0;
+    const wins       = roster.record?.wins   || 0;
+    const losses     = roster.record?.losses || 0;
+    const pf         = roster.record?.pf     || 0;
+    const pa         = roster.record?.pa     || 0;
     const totalGames = wins + losses;
     const winPct     = totalGames > 0 ? wins / totalGames : 0.5;
     const winNowBias = Math.min(100, Math.max(0, Math.round(winPct * 100 + (wins >= 7 ? 15 : losses >= 7 ? -20 : 0))));
 
-    const sortedRosters    = [...allRosters].sort((a,b) => (b.settings?.wins||0) - (a.settings?.wins||0));
-    const myRank           = sortedRosters.findIndex(r => r.roster_id === rosterId);
+    const sortedRosters    = [...allRosters].sort((a,b) => (b.record?.wins||0) - (a.record?.wins||0));
+    const myRank           = sortedRosters.findIndex(r => r.teamId === rosterId);
     const playoffSpots     = Math.floor(allRosters.length / 3);
     const playoffContention = myRank < playoffSpots * 2;
 
-    const rosterPlayerIds = roster.players || [];
+    const rosterPlayerIds = roster.playerIds || [];
     const rosterPlayers   = rosterPlayerIds.map(pid =>
       players.find(p => String(p.sleeperPlayerId) === String(pid) || String(p.id) === String(pid))
     ).filter(Boolean);
