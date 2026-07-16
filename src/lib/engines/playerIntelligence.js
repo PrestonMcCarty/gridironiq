@@ -8,8 +8,8 @@ export const PlayerIntelligence = {
     const pos = sp.position || sp.fantasy_positions?.[0] || "?";
 
     // ── Route DST and K to specialized compute paths ──────────────────────
-    if (pos === "DST") return this._computeDST(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank, byeWeekMap, fetchedAt);
-    if (pos === "K")   return this._computeK(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank, byeWeekMap, fetchedAt);
+    if (pos === "DST") return this._computeDST(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank, byeWeekMap, fetchedAt, seasonStarted);
+    if (pos === "K")   return this._computeK(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank, byeWeekMap, fetchedAt, seasonStarted);
 
     // ── Skill player path (QB / RB / WR / TE) ────────────────────────────
     const team = sp.team || sp.fantasy_team || "FA";
@@ -290,7 +290,7 @@ export const PlayerIntelligence = {
   },
 
   // ── D/ST compute path ───────────────────────────────────────────────────
-  _computeDST(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank, byeWeekMap = {}, fetchedAt = {}) {
+  _computeDST(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank, byeWeekMap = {}, fetchedAt = {}, seasonStarted = true) {
     const scores    = weeklyScores.filter(s => s != null && !isNaN(s));
     const avg       = n => scores.length >= n
       ? scores.slice(-n).reduce((a, b) => a + b, 0) / n
@@ -349,6 +349,7 @@ export const PlayerIntelligence = {
       trendDir, trendPct, opportunityScore: 50, consistencyScore,
       boomPct, bustPct, sosScore, playoffSosScore, bye: byeWeekMap[sp.team] || sp.bye_week || null, injuryRiskScore: 90,
       matchupGrade, rawDefRank, oppTeam, adp: resolvedAdp, fcVal, injStatus: null, scores,
+      seasonStarted,
     });
 
     return {
@@ -396,7 +397,7 @@ export const PlayerIntelligence = {
   },
 
   // ── Kicker compute path ─────────────────────────────────────────────────
-  _computeK(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank, byeWeekMap = {}, fetchedAt = {}) {
+  _computeK(sp, weeklyScores, projData, fcValue, defRanksByPos, positionalRank, byeWeekMap = {}, fetchedAt = {}, seasonStarted = true) {
     const scores    = weeklyScores.filter(s => s != null && !isNaN(s));
     const avg       = n => scores.length >= n
       ? scores.slice(-n).reduce((a, b) => a + b, 0) / n
@@ -476,7 +477,7 @@ export const PlayerIntelligence = {
       trendDir, trendPct, opportunityScore: 50, consistencyScore,
       boomPct, bustPct, sosScore, playoffSosScore: (defRanksByPos["K"] ? Math.round(((32 - (defRanksByPos["K"][sp.team] || 16)) / 31) * 94 + 3) : sosScore), bye: byeWeekMap[sp.team] || sp.bye_week || null, injuryRiskScore,
       matchupGrade, rawDefRank, oppTeam, adp: resolvedAdp, fcVal, injStatus, scores,
-      staleFlags: kStaleFlags,
+      staleFlags: kStaleFlags, seasonStarted,
     });
 
     return {

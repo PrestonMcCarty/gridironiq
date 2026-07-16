@@ -1,33 +1,21 @@
 export const AIExplanationEngine = {
   generate(p) {
+    // ── Offseason early exit — ALL positions ───────────────────────────────
+    // The true offseason signal is "no games played yet this season" — passed
+    // down globally as seasonStarted. Checked BEFORE position routing so
+    // kickers and defenses also show OFFSEASON instead of a fabricated verdict.
+    // We do NOT key on missing_opponent, because the ESPN schedule feed supplies
+    // next-season opponents during the offseason (so that flag is no longer a
+    // reliable offseason indicator). Fabricating a confidence score from
+    // baseline-only inputs is misleading.
+    if (p.seasonStarted === false && (p.scores?.length ?? 0) === 0) {
+      return this._offseasonResult(p);
+    }
+
     // ── Route K and DST to specialized recommendation paths ───────────────
     if (p.pos === "DST") return this._generateDST(p);
     if (p.pos === "K")   return this._generateK(p);
     const staleFlags = p.staleFlags || [];
-
-    // ── Offseason early exit ───────────────────────────────────────────────
-    // The true offseason signal is "no games played yet this season" — passed
-    // down globally as seasonStarted. We do NOT key on missing_opponent,
-    // because the ESPN schedule feed supplies next-season opponents during the
-    // offseason (so that flag is no longer a reliable offseason indicator).
-    // Fabricating a confidence score from baseline-only inputs is misleading.
-    const isOffseason = p.seasonStarted === false && (p.scores?.length ?? 0) === 0;
-
-    if (isOffseason) {
-      const reasons = [
-        `${p.name} is on your roster — offseason analysis based on rankings and value`,
-        p.injuryRiskScore >= 85
-          ? `Healthy heading into the offseason — no injury concerns`
-          : `Monitor injury recovery status before season`,
-      ].filter(Boolean);
-      return {
-        action: "OFFSEASON", confidence: null,
-        reasons,
-        riskFactors: [`No matchup or historical stats available until the season begins`],
-        strengths: reasons.slice(0, 2).map(r => r.split(" — ")[0] || r),
-        _penalties: [], _bonuses: [],
-      };
-    }
 
     // ── Skill player path (QB / RB / WR / TE) ────────────────────────────
     const reasons     = [];
@@ -121,6 +109,27 @@ export const AIExplanationEngine = {
       riskFactors: riskFactors.slice(0, 3),
       strengths:   reasons.slice(0, 3).map(r => r.split(" — ")[0] || r),
       _penalties, _bonuses,
+    };
+  },
+
+  // Position-aware offseason result (no games played yet). Used for every
+  // position so kickers/defenses don't show a fabricated confidence verdict.
+  _offseasonResult(p) {
+    const isSkill = ["QB", "RB", "WR", "TE"].includes(p.pos);
+    const reasons = [
+      `${p.name} is on your roster — offseason analysis based on rankings and value`,
+      isSkill
+        ? (p.injuryRiskScore >= 85
+            ? `Healthy heading into the offseason — no injury concerns`
+            : `Monitor injury recovery status before season`)
+        : `${p.pos} outlook is set once Week 1 matchups are posted`,
+    ].filter(Boolean);
+    return {
+      action: "OFFSEASON", confidence: null,
+      reasons,
+      riskFactors: [`No matchup or historical stats available until the season begins`],
+      strengths: reasons.slice(0, 2).map(r => r.split(" — ")[0] || r),
+      _penalties: [], _bonuses: [],
     };
   },
 
