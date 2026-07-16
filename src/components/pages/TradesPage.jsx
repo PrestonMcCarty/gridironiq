@@ -16,7 +16,7 @@ export const TradesPage = () => {
     players,
     leagueId, setLeagueId,
     leagueInfo, setLeagueInfo,
-    myRosterId,
+    myRosterId, myRosterIds,
     rosters, users, transactions,
     leagueLoaded, leagueLoading,
     reloadLeague,
@@ -52,14 +52,6 @@ export const TradesPage = () => {
     }, 100);
   }, [myProfile, otherProfiles, players]);
 
-  useEffect(() => {
-    if (players.length >= 8 && !giving.length) {
-      const top = players.filter(p => !p.injury).slice(0, 8);
-      setGiving([top[4]?.id, top[5]?.id].filter(Boolean));
-      setReceiving([top[0]?.id, top[2]?.id].filter(Boolean));
-    }
-  }, [players]);
-
   const handleLeagueLoaded = (lid, uid, info) => {
     // Delegate to the multi-league store — this persists the league and makes
     // it the active league globally, so all pages see it immediately.
@@ -67,14 +59,28 @@ export const TradesPage = () => {
   };
 
   const findP      = id => players.find(p => String(p.id) === String(id) || String(p.sleeperPlayerId) === String(id));
+  // Blended trade value — same basis the Trade Finder uses: FantasyCalc value
+  // (positional/market worth) + projected points. More robust than PPG alone.
+  const tradeVal   = p => (p?.fcValue || 0) * 0.6 + (p?.ppg || 0) * 100 * 0.4;
   const totalGive  = giving.reduce((s, id) => s + (findP(id)?.ppg || 0), 0);
   const totalRec   = receiving.reduce((s, id) => s + (findP(id)?.ppg || 0), 0);
   const fcGive     = giving.reduce((s, id) => s + (findP(id)?.fcValue || 0), 0);
   const fcRec      = receiving.reduce((s, id) => s + (findP(id)?.fcValue || 0), 0);
-  const diff       = totalRec - totalGive;
-  const fcDiff     = fcRec - fcGive;
-  const verdict    = diff > 3 ? "YOU WIN" : diff < -3 ? "YOU LOSE" : "FAIR";
+  const giveVal    = giving.reduce((s, id) => s + tradeVal(findP(id)), 0);
+  const recVal     = receiving.reduce((s, id) => s + tradeVal(findP(id)), 0);
+  const diff       = totalRec - totalGive;            // PPG delta (supporting)
+  const fcDiff     = fcRec - fcGive;                  // FC delta (supporting)
+  const valRatio   = giveVal > 0 ? recVal / giveVal : (recVal > 0 ? 2 : 1);
+  const valPct     = Math.round((valRatio - 1) * 100); // + = you gain value
+  const verdict    = valPct >= 8 ? "YOU WIN" : valPct <= -8 ? "YOU LOSE" : "FAIR";
   const vc         = verdict === "YOU WIN" ? C.accent : verdict === "YOU LOSE" ? C.danger : C.warning;
+
+  // Your roster's positional counts (for positional-fit context in the analysis).
+  const myPosCounts = useMemo(() => {
+    const c = {};
+    (myRosterIds || []).forEach(id => { const p = findP(id); if (p) c[p.pos] = (c[p.pos] || 0) + 1; });
+    return c;
+  }, [myRosterIds, players]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const manualAnalysis = useMemo(() => {
     if (!giving.length || !receiving.length) return null;
@@ -86,16 +92,22 @@ export const TradesPage = () => {
     const injR = rP.filter(p => p.injury === "OUT" || p.injury === "IR");
     const reasons = [];
     const risks   = [];
-    if (diff > 0) reasons.push(`You gain ${diff.toFixed(1)} PPG on average from this trade`);
-    if (fcDiff > 0) reasons.push(`FantasyCalc value favors you by ${fcDiff} points`);
-    if (rC > gC + 5) reasons.push(`Players you receive have higher AI confidence (${Math.round(rC)}% vs ${Math.round(gC)}%)`);
+    if (valPct > 0)  reasons.push(`You gain ${valPct}% in blended value (FantasyCalc + projected points)`);
+    if (fcDiff > 0)  reasons.push(`FantasyCalc value favors you by ${Math.round(fcDiff)} points`);
+    if (diff > 0)    reasons.push(`+${diff.toFixed(1)} PPG of weekly production`);
+    if (rC > gC + 5) reasons.push(`Players you receive have higher confidence (${Math.round(rC)}% vs ${Math.round(gC)}%)`);
     if (injG.length) reasons.push(`${injG.map(p => p.name).join(", ")} carry injury risk — good time to sell`);
+    // Positional-fit context (only meaningful when your roster is connected).
+    const deepIncoming = rP.filter(p => (myPosCounts[p.pos] || 0) >= 3);
+    if (deepIncoming.length) risks.push(`You already roster 3+ ${deepIncoming[0].pos}s — ${deepIncoming.map(p => p.name).join(", ")} may not crack your lineup`);
+    const thinOutgoing = gP.filter(p => (myPosCounts[p.pos] || 0) <= 1 && (myPosCounts[p.pos] || 0) > 0);
+    if (thinOutgoing.length) risks.push(`Trading ${thinOutgoing.map(p => p.name).join(", ")} leaves you thin at ${thinOutgoing[0].pos}`);
     if (injR.length) risks.push(`${injR.map(p => p.name).join(", ")} you receive are injured — verify timeline`);
-    if (diff < 0) risks.push(`You give up ${Math.abs(diff).toFixed(1)} PPG — ensure positional need justifies the cost`);
+    if (valPct < 0)  risks.push(`You give up ${Math.abs(valPct)}% in value — ensure positional need justifies the cost`);
     if (rP.some(p => p.trend === "down")) risks.push(`Trending-down player in the return — check last 4 game log`);
-    const confidence = Math.min(92, Math.max(30, 50 + diff * 3 + (rC - gC) * 0.5 + injG.length * 5 - injR.length * 8));
-    return { verdict, confidence: Math.round(confidence), reasons: reasons.length ? reasons : ["Trade is close to even in PPG value"], risks: risks.length ? risks : ["Standard weekly variance — both sides have upside"] };
-  }, [giving, receiving, players]);
+    const confidence = Math.min(92, Math.max(30, 50 + valPct * 1.2 + (rC - gC) * 0.5 + injG.length * 5 - injR.length * 8));
+    return { verdict, confidence: Math.round(confidence), reasons: reasons.length ? reasons : ["Trade is close to even in value"], risks: risks.length ? risks : ["Standard weekly variance — both sides have upside"] };
+  }, [giving, receiving, players, myPosCounts]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const addToSide = (id, side) => {
     if (side === "give") {
@@ -238,7 +250,7 @@ export const TradesPage = () => {
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "36px 4px 0", flexShrink: 0 }}>
               <div style={{ background: vc + "20", border: `2px solid ${vc}`, borderRadius: 10, padding: "14px 18px", textAlign: "center", minWidth: 96 }}>
                 <div style={{ fontFamily: "monospace", fontSize: 16, fontWeight: 900, color: vc }}>{verdict}</div>
-                <div style={{ fontFamily: "monospace", fontSize: 10, color: C.muted, marginTop: 2 }}>{Math.abs(diff).toFixed(1)} PPG {diff > 0 ? "gained" : "lost"}</div>
+                <div style={{ fontFamily: "monospace", fontSize: 10, color: C.muted, marginTop: 2 }}>{valPct > 0 ? "+" : ""}{valPct}% value{diff !== 0 ? ` · ${diff > 0 ? "+" : ""}${diff.toFixed(1)} PPG` : ""}</div>
               </div>
               <span style={{ color: C.muted, fontSize: 18 }}>⇄</span>
             </div>
@@ -248,7 +260,7 @@ export const TradesPage = () => {
             <div style={{ marginTop: 14, background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`, padding: 16 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                 <BrainIcon c={C.accent} />
-                <p style={{ margin: 0, fontSize: 10, fontWeight: 800, color: C.accent, letterSpacing: 1.5, fontFamily: "monospace" }}>⚡ AI TRADE ANALYSIS</p>
+                <p style={{ margin: 0, fontSize: 10, fontWeight: 800, color: C.accent, letterSpacing: 1.5, fontFamily: "monospace" }}>⚡ TRADE ANALYSIS</p>
                 <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ fontSize: 10, color: C.muted, fontFamily: "monospace" }}>Confidence:</span>
                   <ConfidenceMeter value={manualAnalysis.confidence} size="sm" />
